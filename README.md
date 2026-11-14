@@ -14,6 +14,7 @@ No PowerShell, use `./scripts/run.ps1`. Escolha o ambiente no menu e, para a sta
 
 - [Execução, seed e depuração no VS Code](docs/execucao.md)
 - [Arquitetura e padrões do projeto](docs/arquitetura.md)
+- [Design responsivo e tema do Keycloak](docs/design.md)
 - [Especificação funcional](docs/spec.md)
 - [Contrato OpenAPI](docs/openapi.json)
 - [Login e integração com Keycloak](docs/autenticacao.md)

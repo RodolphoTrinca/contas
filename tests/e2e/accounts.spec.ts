@@ -17,6 +17,7 @@ test("abre, reenvia após perda da resposta, altera e exclui pelo Nginx", async 
 
   await login(page);
   await expect(page.getByRole("heading", { name: "Contas", exact: true })).toBeVisible();
+  await page.getByRole("main").getByRole("button", { name: "Nova conta" }).first().click();
   await page.getByLabel("Nome do titular").fill("Ana Teste E2E");
   await page.getByLabel("CPF", { exact: true }).fill("529.982.247-25");
   const open = page.getByRole("button", { name: "Abrir conta", exact: true });

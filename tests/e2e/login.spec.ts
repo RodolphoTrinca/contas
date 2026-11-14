@@ -7,7 +7,7 @@ test("login OIDC cria sessão HttpOnly e logout encerra o acesso", async ({ page
   await login(page);
   const logout = page.getByRole("button", { name: "Sair", exact: true });
   await logout.click();
-  const confirmation = page.getByRole("button", { name: /logout|sign out/i });
+  const confirmation = page.getByRole("button", { name: /confirmar saída|logout|sign out/i });
   await confirmation.click();
   await expect(page.getByRole("link", { name: "Entrar com Keycloak" })).toBeVisible();
   expect((await page.context().cookies()).some(cookie => cookie.name === "contas_access")).toBe(false);

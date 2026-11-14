@@ -1,0 +1,34 @@
+@font-face {
+  font-family: Inter;
+  src: url("./inter-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --krt-font: Inter, system-ui, sans-serif;
+  --krt-canvas: #f1f5f9;
+  --krt-auth: #faf8ff;
+  --krt-white: #fff;
+  --krt-ink: #131b2e;
+  --krt-muted: #475569;
+  --krt-line: #e2e8f0;
+  --krt-outline: #73777f;
+  --krt-navy: #1e3e62;
+  --krt-dark: #152c46;
+  --krt-deep: #0b192c;
+  --krt-teal: #0f766e;
+  --krt-mint: #99efe5;
+  --krt-tint: #f2f3ff;
+  --krt-active-bg: #f0fdfa;
+  --krt-active-line: #99f6e4;
+  --krt-danger: #be123c;
+  --krt-danger-bg: #fff1f2;
+  --krt-danger-line: #fecdd3;
+  --krt-warning: #fffbeb;
+  --krt-warning-line: #fde68a;
+  --krt-radius: .75rem;
+  --krt-card-radius: 1rem;
+  --krt-shadow: 0 1px 2px rgb(15 23 42 / .08);
+}

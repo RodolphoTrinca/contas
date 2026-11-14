@@ -1,0 +1,46 @@
+@import url("../brand/tokens.css");
+
+html.login-pf, html.login-pf body, .pf-v5-c-login {
+  background: var(--krt-auth, #faf8ff) !important;
+  color: var(--krt-ink, #131b2e);
+  font-family: var(--krt-font, Inter, system-ui, sans-serif);
+}
+.pf-v5-c-login__container {
+  width: min(100% - 2rem, 34rem);
+  display: block;
+  margin: auto;
+  padding-block: clamp(1rem, 8vh, 5rem);
+}
+.pf-v5-c-login__header { display: none; }
+.pf-v5-c-login__main {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--krt-line, #e2e8f0);
+  border-radius: 1rem;
+  box-shadow: 0 16px 40px rgb(11 25 44 / .12);
+}
+.pf-v5-c-login__main::before {
+  display: block;
+  content: "Banco KRT";
+  padding: 1rem 1.5rem 1rem 4.75rem;
+  background: #0b192c url("../brand/mark.png") 1.5rem center / 2.5rem no-repeat;
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 2.5rem;
+}
+.pf-v5-c-login__main-header { padding: 1.5rem 1.5rem .75rem; }
+.pf-v5-c-login__main-header h1 { color: #1e3e62; font-weight: 700; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.pf-v5-c-login__main-body { padding: .75rem 1.5rem 1.5rem; }
+.pf-v5-c-form-control { border-radius: .75rem; min-height: 44px; }
+.pf-v5-c-form-control input { min-height: 42px; }
+.pf-v5-c-button { border-radius: .75rem; min-height: 44px; }
+.pf-v5-c-button.pf-m-primary { --pf-v5-c-button--m-primary--BackgroundColor: #1e3e62; --pf-v5-c-button--m-primary--hover--BackgroundColor: #152c46; }
+.pf-v5-c-button:focus-visible, .pf-v5-c-form-control:focus-within { outline: 2px solid #0f766e; outline-offset: 2px; }
+#kc-logout-confirm .instruction { margin-block: 0 1rem; color: #475569; }
+#kc-logout { width: 100%; }
+@media (max-width: 36rem) {
+  .pf-v5-c-login__main-header, .pf-v5-c-login__main-body { padding-inline: 1rem; }
+  .pf-v5-c-login__main::before { padding-left: 4rem; background-position-x: 1rem; }
+  .pf-v5-c-form-control input { font-size: 1rem; }
+}

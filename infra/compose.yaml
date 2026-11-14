@@ -44,6 +44,10 @@ services:
       postgres: { condition: service_healthy }
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
+      - ./themes/banco-krt/login/theme.properties:/opt/keycloak/themes/banco-krt/login/theme.properties:ro
+      - ./themes/banco-krt/login/messages:/opt/keycloak/themes/banco-krt/login/messages:ro
+      - ./themes/banco-krt/login/resources/css/krt.css:/opt/keycloak/themes/banco-krt/login/resources/css/krt.css:ro
+      - ../src/Contas.Web/public/brand:/opt/keycloak/themes/banco-krt/login/resources/brand:ro
       - ./keycloak-entrypoint.sh:/opt/keycloak/contas-entrypoint.sh:ro
     ports:
       - "127.0.0.1:${KEYCLOAK_PORT:-18090}:8080"
