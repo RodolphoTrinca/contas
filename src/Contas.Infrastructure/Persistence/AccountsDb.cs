@@ -14,6 +14,10 @@ public sealed class AccountsDb(DbContextOptions<AccountsDb> options) : DbContext
         model.Entity<StoredAccount>().HasIndex(row => row.Cpf).IsUnique()
             .HasDatabaseName("accounts_cpf_current").HasFilter("NOT \"Deleted\"");
         model.Entity<StoredAccount>().Property(row => row.Version).IsConcurrencyToken();
+        model.Entity<StoredAccount>().Property(row => row.ManagerSubject).IsConcurrencyToken().HasMaxLength(36);
+        model.Entity<StoredAccount>().Property(row => row.OwnerSubject).HasMaxLength(36).IsConcurrencyToken();
+        model.Entity<StoredAccount>().HasIndex(row => row.ManagerSubject);
+        model.Entity<StoredAccount>().HasIndex(row => row.OwnerSubject).IsUnique().HasFilter("NOT \"Deleted\"");
         model.Entity<IdempotencyRecord>().HasKey(row => new { row.Scope, row.Key });
         model.Entity<IdempotencyRecord>().HasIndex(row => row.ExpiresAt);
         model.Entity<OutboxRecord>().HasKey(row => row.Sequence);

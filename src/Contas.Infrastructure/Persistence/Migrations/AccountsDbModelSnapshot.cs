@@ -108,6 +108,16 @@ namespace Contas.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ManagerSubject")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.Property<string>("OwnerSubject")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -120,6 +130,12 @@ namespace Contas.Infrastructure.Persistence.Migrations
                     b.HasIndex("Cpf")
                         .IsUnique()
                         .HasDatabaseName("accounts_cpf_current")
+                        .HasFilter("NOT \"Deleted\"");
+
+                    b.HasIndex("ManagerSubject");
+
+                    b.HasIndex("OwnerSubject")
+                        .IsUnique()
                         .HasFilter("NOT \"Deleted\"");
 
                     b.ToTable("Accounts");

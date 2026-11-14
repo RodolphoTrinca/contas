@@ -14,6 +14,12 @@
       },
       {
         "name": "cards-reader"
+      },
+      {
+        "name": "accounts-manager"
+      },
+      {
+        "name": "accounts-customer"
       }
     ]
   },
@@ -50,6 +56,63 @@
       "serviceAccountClientId": "cards-api",
       "realmRoles": [
         "cards-reader"
+      ]
+    },
+    {
+      "id": "74113d8a-7870-4e36-a8f8-141a69a8a601",
+      "username": "gerente-a",
+      "enabled": true,
+      "firstName": "gerente-a",
+      "lastName": "Local",
+      "email": "gerente-a@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "gerente-a-local",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "accounts-manager"
+      ]
+    },
+    {
+      "id": "74113d8a-7870-4e36-a8f8-141a69a8a602",
+      "username": "gerente-b",
+      "enabled": true,
+      "firstName": "gerente-b",
+      "lastName": "Local",
+      "email": "gerente-b@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "gerente-b-local",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "accounts-manager"
+      ]
+    },
+    {
+      "id": "74113d8a-7870-4e36-a8f8-141a69a8a603",
+      "username": "cliente",
+      "enabled": true,
+      "firstName": "cliente",
+      "lastName": "Local",
+      "email": "cliente@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "cliente-local",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "accounts-customer"
       ]
     }
   ],

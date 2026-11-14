@@ -29,3 +29,5 @@ No PowerShell, rode `./scripts/test.ps1 -Mode fast`, `-Mode integration`, `-Mode
 - Scalar e OpenAPI servidos pelo Nginx, com a chave de idempotência documentada.
 
 Para atualizar a especificação a partir do ambiente padrão, use `curl -fsS http://localhost:8080/openapi/v1.json -o docs/openapi.json`.
+
+O cenário de carteiras usa dois gerentes, um cliente e o Operador autenticados pelo Keycloak. Ele verifica abertura com atribuição automática, consultas e alterações dentro e fora da carteira, transferência exclusiva do Operador, perda de acesso após transferência, reenvio de uma abertura anterior e consulta do titular.

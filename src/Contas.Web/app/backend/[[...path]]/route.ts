@@ -9,9 +9,12 @@ async function forward(request: NextRequest, context: Context) {
   if (request.method !== "GET" && request.headers.get("origin") !== origin)
     return fail(403, "auth.origin_forbidden", "Origem não autorizada.");
   const path = (await context.params).path ?? [];
-  if (path.length > 1 || (path.length === 1 && !/^[a-f0-9-]{36}$/i.test(path[0])))
-    return fail(404, "request.not_found", "Rota não encontrada.");
-  const target = api + "/api/v1/accounts" + (path[0] ? "/" + path[0] : "") + request.nextUrl.search;
+  const id = /^[a-f0-9-]{36}$/i;
+  const allowed = path.length === 0 ||
+    (path.length === 1 && (id.test(path[0]) || (path[0] === "permissions" && request.method === "GET"))) ||
+    (path.length === 2 && request.method === "PUT" && id.test(path[0]) && ["portfolio", "owner"].includes(path[1]));
+  if (!allowed) return fail(404, "request.not_found", "Rota não encontrada.");
+  const target = api + "/api/v1/accounts" + (path.length ? "/" + path.join("/") : "") + request.nextUrl.search;
   const headers = new Headers({ Authorization: "Bearer " + token });
   for (const name of ["content-type", "idempotency-key"]) {
     const value = request.headers.get(name);

@@ -14,7 +14,7 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
     ILogger<AccountStore> logger) : IAccountStore
 {
     public async Task<Result<WriteReceipt>> Write(string scope, Guid key, string fingerprint,
-        Func<IAccounts, Task<Result<Account>>> execute, CancellationToken ct)
+        Func<IAccounts, Task<Result<Account>>> execute, CancellationToken ct, AccountAccess? access = null)
     {
         try
         {
@@ -28,12 +28,15 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
                 if (existing.Fingerprint != fingerprint)
                     return Result<WriteReceipt>.Failure(new("idempotency.key_conflict", "A chave já foi usada em outra requisição.", ErrorKind.Conflict));
                 var previous = JsonSerializer.Deserialize<AccountView>(existing.Response);
+                if (previous is not null && access is not null &&
+                    !await Visible(db.Accounts, access).AnyAsync(row => row.Id == previous.Id, ct))
+                    return Result<WriteReceipt>.Failure(AccountErrors.Missing);
                 return previous is not null
                     ? Result<WriteReceipt>.Success(new(previous, true))
                     : Result<WriteReceipt>.Failure(AccountErrors.Unavailable);
             }
 
-            var session = new AccountSession(db);
+            var session = new AccountSession(db, access);
             var result = await execute(session);
             if (!result.IsSuccess) return Result<WriteReceipt>.Failure(result.Error);
 
@@ -71,13 +74,13 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
         }
     }
 
-    public async Task<Result<AccountView>> Get(Guid id, CancellationToken ct)
+    public async Task<Result<AccountView>> Get(Guid id, CancellationToken ct, AccountAccess? access = null)
     {
-        var lookup = await cache.Read(id);
+        var lookup = access is null ? await cache.Read(id) : new CacheLookup(null, null);
         if (lookup.Account is not null) return Result<AccountView>.Success(lookup.Account);
         try
         {
-            var account = await Project(db.Accounts.AsNoTracking().Where(row => !row.Deleted && row.Id == id)).SingleOrDefaultAsync(ct);
+            var account = await Project(Visible(db.Accounts.AsNoTracking(), access).Where(row => !row.Deleted && row.Id == id)).SingleOrDefaultAsync(ct);
             if (account is null) return Result<AccountView>.Failure(AccountErrors.Missing);
             await cache.Fill(id, lookup.Generation, account);
             return Result<AccountView>.Success(account);
@@ -89,11 +92,11 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
         }
     }
 
-    public async Task<Result<IReadOnlyList<AccountView>>> List(int limit, int offset, CancellationToken ct)
+    public async Task<Result<IReadOnlyList<AccountView>>> List(int limit, int offset, CancellationToken ct, AccountAccess? access = null)
     {
         try
         {
-            var rows = db.Accounts.AsNoTracking().Where(row => !row.Deleted)
+            var rows = Visible(db.Accounts.AsNoTracking(), access).Where(row => !row.Deleted)
                 .OrderBy(row => row.HolderName).ThenBy(row => row.Id).Skip(offset).Take(limit);
             return Result<IReadOnlyList<AccountView>>.Success(await Project(rows).ToListAsync(ct));
         }
@@ -103,6 +106,14 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
             return Result<IReadOnlyList<AccountView>>.Failure(AccountErrors.Unavailable);
         }
     }
+
+    internal static IQueryable<StoredAccount> Visible(IQueryable<StoredAccount> rows, AccountAccess? access)
+        => access switch
+        {
+            null => rows,
+            { IsManager: true } => rows.Where(row => row.ManagerSubject == access.Subject),
+            _ => rows.Where(row => row.OwnerSubject == access.Subject)
+        };
 
     private static IQueryable<AccountView> Project(IQueryable<StoredAccount> rows)
         => rows.Select(row => new AccountView(row.Id, row.HolderName,

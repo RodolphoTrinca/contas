@@ -10,23 +10,37 @@ internal static class AccountRoutes
     internal static void MapV1(this WebApplication app)
     {
         var v1 = app.MapGroup("/api/v1");
-        var accounts = v1.MapGroup("/accounts").RequireAuthorization("operator").WithTags("Contas");
+        var accounts = v1.MapGroup("/accounts").WithTags("Contas");
         Describe<IReadOnlyList<AccountView>>(accounts.MapGet("/", async (int? limit, int? offset, ListAccounts useCase, HttpContext http, CancellationToken ct)
-            => Responses.From(http, await useCase.Execute(limit, offset, ct), x => x)));
+            => Responses.From(http, await useCase.Execute(limit, offset, ct, AccountIdentity.Access(http.User)), x => x)).RequireAuthorization("account-read"));
         Describe<AccountView>(accounts.MapGet("/{id:guid}", async (Guid id, GetAccount useCase, HttpContext http, CancellationToken ct)
-            => Responses.From(http, await useCase.Execute(id, ct), x => x)));
+            => Responses.From(http, await useCase.Execute(id, ct, AccountIdentity.Access(http.User)), x => x)).RequireAuthorization("account-read"));
         Describe<AccountView>(accounts.MapPost("/", async ([FromHeader(Name = "Idempotency-Key")] Guid key, OpenRequest body,
             OpenAccount useCase, HttpContext http, CancellationToken ct) =>
             key == Guid.Empty ? InvalidKey(http) : Responses.Write(http,
-                await useCase.Execute(AccountIdentity.Scope(http.User), key, body.HolderName, body.Cpf, ct), x => x, 201)), 201);
+                await useCase.Execute(AccountIdentity.Scope(http.User), key, body.HolderName, body.Cpf, ct, AccountIdentity.Access(http.User)), x => x, 201)).RequireAuthorization("account-write"), 201);
         Describe<AccountView>(accounts.MapPut("/{id:guid}", async (Guid id, [FromHeader(Name = "Idempotency-Key")] Guid key,
             ReviseRequest body, ReviseAccount useCase, HttpContext http, CancellationToken ct) =>
             key == Guid.Empty ? InvalidKey(http) : Responses.Write(http,
-                await useCase.Execute(AccountIdentity.Scope(http.User), key, id, body.HolderName, body.Status, ct), x => x)));
+                await useCase.Execute(AccountIdentity.Scope(http.User), key, id, body.HolderName, body.Status, ct, AccountIdentity.Access(http.User)), x => x)).RequireAuthorization("account-write"));
         Describe<DeletedAccount>(accounts.MapDelete("/{id:guid}", async (Guid id, [FromHeader(Name = "Idempotency-Key")] Guid key,
             DeleteAccount useCase, HttpContext http, CancellationToken ct) =>
             key == Guid.Empty ? InvalidKey(http) : Responses.Write(http,
-                await useCase.Execute(AccountIdentity.Scope(http.User), key, id, ct), x => new DeletedAccount(x.Id, true))));
+                await useCase.Execute(AccountIdentity.Scope(http.User), key, id, ct, AccountIdentity.Access(http.User)), x => new DeletedAccount(x.Id, true))).RequireAuthorization("account-write"));
+
+        Describe<bool>(accounts.MapPut("/{id:guid}/portfolio", async (Guid id, AssignmentRequest body,
+            IAccountAssignment assignment, HttpContext http, CancellationToken ct)
+            => Responses.From(http, await assignment.Transfer(id, body.Subject, ct), x => x))
+            .RequireAuthorization("operator").WithSummary("Atribui ou transfere a carteira"));
+        Describe<bool>(accounts.MapPut("/{id:guid}/owner", async (Guid id, AssignmentRequest body,
+            IAccountAssignment assignment, HttpContext http, CancellationToken ct)
+            => Responses.From(http, await assignment.LinkOwner(id, body.Subject, ct), x => x))
+            .RequireAuthorization("operator").WithSummary("Vincula a identidade do titular"));
+        Describe<AccountPermissions>(accounts.MapGet("/permissions", (HttpContext http) =>
+        {
+            var access = AccountIdentity.Access(http.User);
+            return Responses.Ok(http, new AccountPermissions(access is null or { IsManager: true }, access is null));
+        }).RequireAuthorization("account-read"));
 
         Describe<FraudStatus>(v1.MapGet("/fraud/accounts/{id:guid}/status", async (Guid id, GetAccount useCase, HttpContext http, CancellationToken ct)
             => Responses.From(http, await useCase.Execute(id, ct), x => new FraudStatus(x.Id, x.Status)))

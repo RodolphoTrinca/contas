@@ -9,6 +9,9 @@ const pageSize = 20;
 const base = "/backend";
 
 export default function Accounts() {
+  const [permissions, setPermissions] = useState({ canWrite: false, canAssign: false });
+  const [assignment, setAssignment] = useState<{ id: string; kind: "portfolio" | "owner" } | null>(null);
+  const [subject, setSubject] = useState("");
   const [items, setItems] = useState<Account[]>([]);
   const [offset, setOffset] = useState(0);
   const [hasNext, setHasNext] = useState(false);
@@ -43,8 +46,11 @@ export default function Accounts() {
         return;
       }
       if (request === requestNumber.current) setNeedsLogin(false);
+      const permissionResponse = await fetch(base + "/permissions", { cache: "no-store" });
+      const nextPermissions = permissionResponse.ok ? (await permissionResponse.json()).data : { canWrite: false, canAssign: false };
       const { data: accounts }: { data: Account[] } = await response.json();
       if (request !== requestNumber.current) return;
+      setPermissions(nextPermissions);
       setItems(accounts.slice(0, pageSize));
       setHasNext(accounts.length > pageSize);
       setOffset(start);
@@ -93,10 +99,17 @@ export default function Accounts() {
 
   function edit(account: Account | null) {
     setDeleting(null);
+    setAssignment(null);
     setError("");
     setEditing(account);
     setDraft(account ? { holderName: account.holderName, cpf: "", status: account.status } : empty);
     nameInput.current?.focus();
+  }
+
+  function assign(account: Account, kind: "portfolio" | "owner") {
+    edit(null);
+    setSubject("");
+    setAssignment({ id: account.id, kind });
   }
 
   function save(event: FormEvent<HTMLFormElement>) {
@@ -134,12 +147,17 @@ export default function Accounts() {
           {loading && <p className="muted" role="status">Carregando contas…</p>}
           {!loading && !loadError && !items.length && <p className="muted">Nenhuma conta nesta página.</p>}
           {!!items.length && <div className="table-scroll"><table>
-            <thead><tr><th>Titular</th><th>CPF</th><th>Status</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Titular</th><th>CPF</th><th>Status</th>{permissions.canWrite && <th>Ações</th>}</tr></thead>
             <tbody>{items.map(account => <tr key={account.id}>
               <td>{account.holderName}</td><td className="cpf">{account.cpf}</td>
               <td><span className={`badge ${account.status}`}>{account.status === "active" ? "Ativa" : "Inativa"}</span></td>
-              <td className="actions"><button className="subtle" disabled={busy} onClick={() => edit(account)} aria-label={`Editar conta de ${account.holderName}`}>Editar</button>
-                <button className="subtle danger" disabled={busy} aria-label={`Excluir conta de ${account.holderName}`} onClick={() => { setError(""); setDeleting(account); }}>Excluir</button></td>
+              {permissions.canWrite && <td className="actions"><button className="subtle" disabled={busy} onClick={() => edit(account)} aria-label={`Editar conta de ${account.holderName}`}>Editar</button>
+                <button className="subtle danger" disabled={busy} aria-label={`Excluir conta de ${account.holderName}`} onClick={() => { setError(""); setAssignment(null); setDeleting(account); }}>Excluir</button>
+                {permissions.canAssign && <>
+                  <button disabled={busy} onClick={() => assign(account, "portfolio")}>Transferir carteira</button>
+                  <button disabled={busy} onClick={() => assign(account, "owner")}>Vincular titular</button>
+                </>}
+              </td>}
             </tr>)}</tbody>
           </table></div>}
           {(offset > 0 || hasNext) && <nav aria-label="Páginas de contas" className="actions pager">
@@ -158,7 +176,23 @@ export default function Accounts() {
               })}>{busy ? "Excluindo…" : "Confirmar exclusão"}</button></div>
           </div>}
         </section>
-        <section className="panel" aria-labelledby="form-heading">
+        {assignment && permissions.canAssign && <section className="panel" aria-labelledby="assignment-heading">
+          <h2 id="assignment-heading">{assignment.kind === "portfolio" ? "Transferir carteira" : "Vincular titular"}</h2>
+          <form onSubmit={event => {
+            event.preventDefault();
+            void write("PUT", `${base}/${assignment.id}/${assignment.kind}`, { subject }, () => {
+              setAssignment(null);
+              setNotice(assignment.kind === "portfolio" ? "Carteira atualizada." : "Titular vinculado.");
+            });
+          }}>
+            <label htmlFor="subject">ID no Keycloak do {assignment.kind === "portfolio" ? "gerente" : "titular"}</label>
+            <input id="subject" required value={subject} disabled={busy} onChange={event => setSubject(event.target.value)} />
+            {error && <p className="error" role="alert">{error}</p>}
+            <button className="primary" disabled={busy}>Confirmar vínculo</button>
+            <button type="button" disabled={busy} onClick={() => edit(null)}>Cancelar</button>
+          </form>
+        </section>}
+        {permissions.canWrite && !assignment && <section className="panel" aria-labelledby="form-heading">
           <h2 id="form-heading">{editing ? "Editar conta" : "Abrir conta"}</h2>
           <form onSubmit={save}>
             <fieldset disabled={busy || !!deleting}>
@@ -178,7 +212,7 @@ export default function Accounts() {
                 {editing && <button type="button" onClick={() => edit(null)}>Cancelar</button>}</div>
             </fieldset>
           </form>
-        </section>
+        </section>}
       </div>
     </main>
   );

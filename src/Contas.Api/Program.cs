@@ -45,6 +45,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration["Redis:Connection"] ?? "127.0.0.1:16379,abortConnect=false"));
 builder.Services.AddSingleton<AccountCache>();
 builder.Services.AddScoped<IAccountStore, AccountStore>();
+builder.Services.AddScoped<IAccountAssignment, AccountAssignment>();
 builder.Services.AddScoped<OpenAccount>();
 builder.Services.AddScoped<ReviseAccount>();
 builder.Services.AddScoped<DeleteAccount>();
@@ -63,6 +64,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("operator", policy => policy.RequireAuthenticatedUser().RequireClaim("azp", "contas-web")
         .RequireAssertion(context => TokenRoles.Has(context.User, "accounts-operator")))
+    .AddPolicy("account-read", policy => policy.RequireAuthenticatedUser().RequireClaim("azp", "contas-web")
+        .RequireAssertion(context => TokenRoles.Has(context.User, "accounts-operator") ||
+            (Guid.TryParse(context.User.FindFirst("sub")?.Value, out _) &&
+            (TokenRoles.Has(context.User, "accounts-manager") || TokenRoles.Has(context.User, "accounts-customer")))))
+    .AddPolicy("account-write", policy => policy.RequireAuthenticatedUser().RequireClaim("azp", "contas-web")
+        .RequireAssertion(context => TokenRoles.Has(context.User, "accounts-operator") ||
+            (Guid.TryParse(context.User.FindFirst("sub")?.Value, out _) &&
+            TokenRoles.Has(context.User, "accounts-manager"))))
     .AddPolicy("fraud", policy => policy.RequireAuthenticatedUser().RequireClaim("azp", "fraud-api")
         .RequireAssertion(context => TokenRoles.Has(context.User, "fraud-reader")))
     .AddPolicy("cards", policy => policy.RequireAuthenticatedUser().RequireClaim("azp", "cards-api")

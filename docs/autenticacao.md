@@ -44,3 +44,11 @@ dotnet run --project samples/Contas.PartnerDemo --urls http://127.0.0.1:5090
 ```
 
 Chame `curl http://127.0.0.1:5090/api/v1/accounts/$ID`. A demonstração obtém o token no servidor e encaminha a resposta da API de contas.
+
+## Carteiras e titulares
+
+O Operador tem acesso a todas as contas. O Gerente pode abrir contas e gerenciar apenas as contas da sua carteira. A abertura pelo Gerente já atribui a conta a ele. O Cliente pode consultar somente a conta vinculada à sua identidade.
+
+Na lista do Operador, use **Transferir carteira** ou **Vincular titular** e informe o ID do usuário no Keycloak. Pela API, use `PUT /api/v1/accounts/{id}/portfolio` ou `PUT /api/v1/accounts/{id}/owner` com `{"subject":"<ID no Keycloak>"}`. Apenas o Operador pode executar essas operações. Use uma identidade que tenha a role correspondente.
+
+Em um realm novo, o Compose provisiona `gerente-a`, `gerente-b` e `cliente`, com senhas de desenvolvimento no formato `<usuário>-local`. Em um realm existente, o import do Keycloak preserva o conteúdo anterior. Crie os usuários e atribua as roles `accounts-manager` e `accounts-customer` no console administrativo para habilitar os novos perfis. Use os IDs que o console mostrar. A migração de contas preserva o banco e deixa os vínculos anteriores em branco.
