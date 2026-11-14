@@ -1,0 +1,137 @@
+{
+  "realm": "contas",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 600,
+  "roles": {
+    "realm": [
+      {
+        "name": "accounts-operator"
+      },
+      {
+        "name": "fraud-reader"
+      },
+      {
+        "name": "cards-reader"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "operador",
+      "enabled": true,
+      "firstName": "Operador",
+      "lastName": "Local",
+      "email": "operador@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "operador-local",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "accounts-operator"
+      ]
+    },
+    {
+      "username": "service-account-fraud-api",
+      "enabled": true,
+      "serviceAccountClientId": "fraud-api",
+      "realmRoles": [
+        "fraud-reader"
+      ]
+    },
+    {
+      "username": "service-account-cards-api",
+      "enabled": true,
+      "serviceAccountClientId": "cards-api",
+      "realmRoles": [
+        "cards-reader"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "contas-api",
+      "enabled": true,
+      "bearerOnly": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "contas-web",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:*/auth/callback"
+      ],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "contas-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "contas-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:*/"
+      }
+    },
+    {
+      "clientId": "fraud-api",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "fraud-api-local",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "contas-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "contas-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "cards-api",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "cards-api-local",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "contas-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "contas-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ]
+}

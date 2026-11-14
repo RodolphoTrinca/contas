@@ -1,0 +1,13 @@
+services:
+  debug-gateway:
+    image: nginx:stable-alpine
+    entrypoint: ["/bin/sh", "/opt/contas/debug-entrypoint.sh"]
+    environment:
+      CONTAS_DEBUG_HOST: ${CONTAS_DEBUG_HOST:-}
+    ports:
+      - "127.0.0.1:${ACCOUNTS_PORT:-8080}:80"
+    volumes:
+      - ./nginx/debug.conf.template:/opt/contas/debug.conf.template:ro
+      - ./nginx/debug-entrypoint.sh:/opt/contas/debug-entrypoint.sh:ro
+    depends_on:
+      - keycloak

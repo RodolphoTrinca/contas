@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API debug → Scalar",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "Build API",
+      "program": "${workspaceFolder}/src/Contas.Api/bin/Debug/net10.0/Contas.Api.dll",
+      "cwd": "${workspaceFolder}/src/Contas.Api",
+      "env": { "ASPNETCORE_ENVIRONMENT": "Development", "ASPNETCORE_URLS": "http://0.0.0.0:5080" },
+      "serverReadyAction": { "action": "openExternally", "pattern": "Now listening on:\\s+http://[^ ]+", "uriFormat": "http://localhost:8080/scalar/v1" }
+    },
+    {
+      "name": "API debug para UI",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "Build API",
+      "program": "${workspaceFolder}/src/Contas.Api/bin/Debug/net10.0/Contas.Api.dll",
+      "cwd": "${workspaceFolder}/src/Contas.Api",
+      "env": { "ASPNETCORE_ENVIRONMENT": "Development", "ASPNETCORE_URLS": "http://0.0.0.0:5080" }
+    },
+    {
+      "name": "Next.js debug → UI",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev -- --hostname 0.0.0.0",
+      "cwd": "${workspaceFolder}/src/Contas.Web",
+      "env": { "OIDC_INTERNAL": "http://localhost:18090/auth/realms/contas" },
+      "serverReadyAction": { "action": "openExternally", "pattern": "Ready in", "uriFormat": "http://localhost:8080/" }
+    }
+  ],
+  "compounds": [
+    { "name": "Stack debug → UI", "configurations": ["API debug para UI", "Next.js debug → UI"], "stopAll": true }
+  ]
+}
