@@ -1,0 +1,12 @@
+import { expect, type Page } from "@playwright/test";
+
+export async function login(page: Page) {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Entrar com Keycloak" }).click();
+  await page.locator("#username").fill("operador");
+  await page.locator("#password").fill("operador-local");
+  await page.locator("#kc-login").click();
+  await expect(page).toHaveURL(url => url.pathname === "/" && url.search === "");
+  const cookie = (await page.context().cookies()).find(item => item.name === "contas_access");
+  expect(cookie?.httpOnly).toBe(true);
+}
