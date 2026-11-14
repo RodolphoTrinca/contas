@@ -6,29 +6,41 @@
   font-display: swap;
 }
 
+/* Banco KRT Component Library v2: explicit swatches and geometry from the export. */
 :root {
   --krt-font: Inter, system-ui, sans-serif;
-  --krt-canvas: #f1f5f9;
+  --krt-canvas: #faf8ff;
   --krt-auth: #faf8ff;
-  --krt-white: #fff;
-  --krt-ink: #131b2e;
-  --krt-muted: #475569;
+  --krt-white: #ffffff;
+  --krt-ground: #f8fafc;
+  --krt-ink: #0f172a;
+  --krt-muted: #334155;
+  --krt-subtle: #64748b;
   --krt-line: #e2e8f0;
-  --krt-outline: #73777f;
-  --krt-navy: #1e3e62;
-  --krt-dark: #152c46;
+  --krt-outline: #c3c6cf;
+  --krt-navy: #0a2540;
+  --krt-dark: #081d33;
   --krt-deep: #0b192c;
-  --krt-teal: #0f766e;
-  --krt-mint: #99efe5;
+  --krt-primary-tint: #e6eff7;
+  --krt-teal: #216963;
+  --krt-mint: #abefe8;
   --krt-tint: #f2f3ff;
-  --krt-active-bg: #f0fdfa;
-  --krt-active-line: #99f6e4;
-  --krt-danger: #be123c;
-  --krt-danger-bg: #fff1f2;
-  --krt-danger-line: #fecdd3;
+  --krt-container: #eaedff;
+  --krt-high: #e2e7ff;
+  --krt-active: #059669;
+  --krt-active-bg: #ecfdf5;
+  --krt-active-dot: #10b981;
+  --krt-inactive-bg: #f1f5f9;
+  --krt-inactive: #475569;
+  --krt-danger: #dc2626;
+  --krt-danger-bg: #fef2f2;
+  --krt-danger-line: #fecaca;
   --krt-warning: #fffbeb;
+  --krt-warning-ink: #92400e;
   --krt-warning-line: #fde68a;
+  --krt-input-radius: .5rem;
   --krt-radius: .75rem;
   --krt-card-radius: 1rem;
-  --krt-shadow: 0 1px 2px rgb(15 23 42 / .08);
+  --krt-shadow: 0 1px 3px rgb(15 23 42 / .06), 0 1px 2px rgb(15 23 42 / .04);
+  --krt-overlay-shadow: 0 24px 64px rgb(11 25 44 / .24);
 }

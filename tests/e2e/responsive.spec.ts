@@ -32,7 +32,7 @@ test("mantém autenticação, cartões e formulários utilizáveis no celular", 
   expect(await noHorizontalScroll()).toBeTruthy();
   await row.getByRole("button", { name: /editar conta/i }).click();
   const edit = page.getByRole("dialog", { name: "Editar conta" });
-  await edit.getByLabel("Status").selectOption("inactive");
+  await edit.getByRole("radio", { name: "Inativa", exact: true }).check();
   await edit.getByRole("button", { name: "Salvar alterações" }).click();
   await expect(row).toContainText("Inativa");
   await row.getByRole("button", { name: /excluir conta/i }).click();

@@ -4,10 +4,11 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Brand } from "../components/Brand";
 import { Login } from "../components/Login";
 import { Overlay } from "../components/Overlay";
+import { Icon } from "../components/Icon";
+import { AccountForm } from "../components/AccountForm";
+import { AccountTable } from "../components/AccountTable";
+import type { Account, Draft } from "../lib/accounts";
 
-type Status = "active" | "inactive";
-type Account = { id: string; holderName: string; cpf: string; status: Status; version: number };
-type Draft = { holderName: string; cpf: string; status: Status };
 const empty: Draft = { holderName: "", cpf: "", status: "active" };
 const pageSize = 20;
 const base = "/backend";
@@ -20,6 +21,9 @@ export default function Accounts() {
   const [offset, setOffset] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [loginReason, setLoginReason] = useState<"required" | "expired" | "failed" | null>(null);
   const authenticated = useRef(false);
   const [forbidden, setForbidden] = useState(false);
@@ -71,6 +75,7 @@ export default function Accounts() {
       setPermissions(nextPermissions);
       setItems(accounts.slice(0, pageSize));
       setHasNext(accounts.length > pageSize);
+      setLastUpdated(new Date());
       setOffset(start);
     } catch {
       if (request === requestNumber.current) setLoadError("Não foi possível carregar as contas. Tente novamente.");
@@ -146,147 +151,55 @@ export default function Accounts() {
 
   if (loginReason) return <Login reason={loginReason} />;
 
-  return (
-    <>
-      <header className="topbar">
-        <div className="topbar-inner">
-          <Brand />
-          {authenticated.current || forbidden ? (
-            <form method="post" action="/auth/logout"><button type="submit" className="logout"><span aria-hidden="true">↪</span> Sair</button></form>
-          ) : null}
-        </div>
-      </header>
+  const role = permissions.canAssign ? "Operador" : permissions.canWrite ? "Gerente" : "Cliente";
+  const filtered = items.filter(account =>
+    (statusFilter === "all" || account.status === statusFilter) &&
+    (account.holderName.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")) || account.cpf.includes(search)));
 
-      <main className="workspace">
-        <div className="page-intro">
-          <div>
-            <h1>Contas</h1>
-            <p>{permissions.canAssign ? "Consulte e gerencie as contas cadastradas." :
-              permissions.canWrite ? "Consulte e gerencie as contas da sua carteira." : "Consulte as contas disponíveis para o seu perfil."}</p>
-          </div>
-          {!forbidden && <div className="actions toolbar">
-            <button ref={refreshButton} type="button" onClick={() => void load(offset)} disabled={loading || busy}>
-              <span aria-hidden="true">↻</span> Atualizar lista
-            </button>
-            {permissions.canWrite && <button type="button" className="primary" disabled={busy || loading} onClick={() => edit(null)}>
-              <span aria-hidden="true">+</span> Nova conta
-            </button>}
-          </div>}
-        </div>
+  return <>
+    <a className="skip-link" href="#workspace">Ir para as contas</a>
+    <header className="topbar"><div className="topbar-inner">
+      <div className="header-identity"><Brand /><span className="context-chip operation-chip">Operação interna <span>| Gestão de contas</span></span><nav aria-label="Navegação principal"><a href="/" aria-current="page">Contas</a></nav></div>
+      {(authenticated.current || forbidden) && <div className="header-session"><span className="session-chip"><span className="status-dot" />Sessão ativa</span><div className="profile"><span className="profile-icon"><Icon name="user" /></span><div><strong>{forbidden ? "Acesso restrito" : role}</strong><span>Banco KRT</span></div></div><form method="post" action="/auth/logout"><button type="submit" className="logout"><Icon name="logout" />Sair</button></form></div>}
+    </div></header>
 
-        {notice && <p className="feedback success" role="status">{notice}</p>}
-        {loadError && <p className="feedback error" role="alert">{loadError}</p>}
-        {!forbidden && <section className="panel" aria-labelledby="accounts-heading" aria-busy={loading}>
-          <div className="panel-title">
-            <h2 id="accounts-heading">Contas cadastradas</h2>
-            {!loading && !loadError && items.length > 0 && <span className="count">{items.length} {items.length === 1 ? "conta nesta página" : "contas nesta página"}</span>}
-          </div>
-          {loading && !items.length && <div className="empty-state" role="status">
-            <span>Carregando contas…</span><div className="skeleton" aria-hidden="true" />
-          </div>}
-          {!loading && !loadError && !items.length && <div className="empty-state">
-            <span className="state-symbol" aria-hidden="true">▤</span>
-            <p>Nenhuma conta nesta página.</p>
-            {permissions.canWrite && offset === 0 && <button className="primary" type="button" onClick={() => edit(null)}>Nova conta</button>}
-          </div>}
-          {items.length > 0 && <table aria-label="Contas cadastradas" role="table">
-            <thead role="rowgroup"><tr role="row">
-              <th role="columnheader" scope="col">Titular da conta</th>
-              <th role="columnheader" scope="col">Identificador (CPF)</th>
-              <th role="columnheader" scope="col">Status</th>
-              {permissions.canWrite && <th role="columnheader" scope="col">Ações</th>}
-            </tr></thead>
-            <tbody role="rowgroup">{items.map(account => (
-              <tr key={account.id} role="row">
-                <td className="holder-cell" role="cell"><div className="holder">
-                  <span className={`avatar ${account.status}`} aria-hidden="true">{account.holderName.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0]).join("").toLocaleUpperCase("pt-BR")}</span>
-                  <strong>{account.holderName}</strong>
-                </div></td>
-                <td className="cpf-cell" role="cell"><span className="mobile-label">CPF </span><span className="cpf">{account.cpf}</span></td>
-                <td className="status-cell" role="cell"><span className={`badge ${account.status}`}>{account.status === "active" ? "Ativa" : "Inativa"}</span></td>
-                {permissions.canWrite && <td className="row-actions" role="cell"><div className="actions">
-                  <button className="compact" disabled={busy} onClick={() => edit(account)} aria-label={`Editar conta de ${account.holderName}`}>Editar</button>
-                  <button className="compact danger" disabled={busy} aria-label={`Excluir conta de ${account.holderName}`} onClick={() => { closeOverlay(); setDeleting(account); }}>Excluir</button>
-                  {permissions.canAssign && <>
-                    <button className="compact" disabled={busy} onClick={() => startAssignment(account, "portfolio")}>Transferir carteira</button>
-                    <button className="compact" disabled={busy} onClick={() => startAssignment(account, "owner")}>Vincular titular</button>
-                  </>}
-                </div></td>}
-              </tr>
-            ))}</tbody>
-          </table>}
-          {(offset > 0 || hasNext) && <nav aria-label="Páginas de contas" className="actions pager">
-            <button disabled={!offset || loading || busy} onClick={() => void load(Math.max(0, offset - pageSize))}>Anterior</button>
-            <span>Página {Math.floor(offset / pageSize) + 1}</span>
-            <button disabled={!hasNext || loading || busy} onClick={() => void load(offset + pageSize)}>Próxima</button>
-          </nav>}
-        </section>}
-      </main>
-      <footer className="site-footer"><div>Banco KRT <span>Gestão de contas</span></div></footer>
+    <main id="workspace" className="workspace">
+      {notice && <div className="feedback success notice" role="status"><Icon name="check" /><p>{notice}</p><button className="icon-button" aria-label="Fechar notificação" onClick={() => setNotice("")}><Icon name="close" /></button></div>}
+      <div className="page-intro"><div><p className="eyebrow">Gestão de contas <span>• {permissions.canAssign ? "Visão geral" : permissions.canWrite ? "Minha carteira" : "Minhas contas"}</span></p><h1>Contas</h1><p className="intro-description">{permissions.canAssign ? "Consulte e gerencie as contas cadastradas." : permissions.canWrite ? "Consulte e gerencie as contas da sua carteira." : "Consulte as contas disponíveis para o seu perfil."}</p></div>
+        {!forbidden && <div className="intro-tools"><div className="sync-status"><span>Última atualização</span><strong>{lastUpdated ? lastUpdated.toLocaleTimeString("pt-BR") : "Carregando…"}</strong></div><div className="actions toolbar"><button ref={refreshButton} type="button" onClick={() => void load(offset)} disabled={loading || busy}><Icon name="refresh" className={loading ? "spinning" : ""} /><span>Atualizar lista</span></button>{permissions.canWrite && <button type="button" className="primary" disabled={busy || loading} onClick={() => edit(null)}><Icon name="plus" />Nova conta</button>}</div></div>}
+      </div>
 
-      {formOpen && permissions.canWrite && <Overlay kind="drawer" title={editing ? "Editar conta" : "Abrir nova conta"}
-        subtitle={editing?.holderName} busy={busy} onClose={closeOverlay}>
-        <form className="overlay-form" onSubmit={save}>
-          <fieldset className="overlay-body" disabled={busy}>
-            <label htmlFor="holder">Nome do titular</label>
-            <input id="holder" value={draft.holderName} onChange={e => setDraft({ ...draft, holderName: e.target.value })} required minLength={2} maxLength={120} autoFocus />
-            {editing ? <>
-              <div className="field"><span>CPF do titular</span><code className="cpf">{editing.cpf}</code></div>
-              <label htmlFor="status">Status</label>
-              <select id="status" value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value as Status })}>
-                <option value="active">Ativa</option><option value="inactive">Inativa</option>
-              </select>
-            </> : <>
-              <label htmlFor="cpf">CPF</label>
-              <input id="cpf" inputMode="numeric" placeholder="000.000.000-00" maxLength={14} required value={draft.cpf} onChange={e => setDraft({ ...draft, cpf: e.target.value })} />
-              <p className="feedback info">Novas contas começam com status <strong>Ativa</strong>.</p>
-            </>}
-            {error && <p className="feedback error" role="alert">{error}</p>}
-          </fieldset>
-          <div className="overlay-footer actions">
-            <button type="button" disabled={busy} onClick={closeOverlay}>Cancelar</button>
-            <button className="primary" type="submit" disabled={busy}>{busy ? "Salvando…" : editing ? "Salvar alterações" : "Abrir conta"}</button>
-          </div>
-        </form>
-      </Overlay>}
+      {loadError && <div className="feedback error" role="alert"><Icon name="warning" /><div><strong>{forbidden ? "Acesso não autorizado" : "Não foi possível atualizar"}</strong><p>{loadError}</p></div></div>}
+      {!forbidden && <section className="panel" aria-labelledby="accounts-heading" aria-busy={loading}>
+        <div className="panel-title"><div className="panel-heading"><Icon name="wallet" /><h2 id="accounts-heading">Contas cadastradas</h2>{!loading && !loadError && <span className="count">{items.length} {items.length === 1 ? "conta" : "contas"}</span>}</div><span className="list-note"><Icon name="info" />Exibidas conforme seu acesso</span></div>
+        <div className="list-tools"><div className="filter-pills" role="group" aria-label="Filtrar por status nesta página">{[{ value: "all", label: "Todas" }, { value: "active", label: "Ativas" }, { value: "inactive", label: "Inativas" }].map(filter => <button key={filter.value} aria-pressed={statusFilter === filter.value} onClick={() => setStatusFilter(filter.value)}>{filter.label}<span>{filter.value === "all" ? items.length : items.filter(account => account.status === filter.value).length}</span></button>)}</div><div className="search-field"><label className="sr-only" htmlFor="account-search">Filtrar por nome ou CPF nesta página</label><Icon name="search" /><input id="account-search" type="search" placeholder="Filtrar nesta página…" value={search} onChange={event => setSearch(event.target.value)} />{search && <button className="icon-button" onClick={() => setSearch("")} aria-label="Limpar busca"><Icon name="close" /></button>}</div></div>
+        {loading && !items.length && <div className="empty-state" role="status"><Icon name="refresh" className="spinning" /><strong>Carregando contas…</strong><div className="skeleton" aria-hidden="true" /></div>}
+        {!loading && !loadError && !items.length && <div className="empty-state"><span className="state-symbol"><Icon name="wallet" /></span><h3>Nenhuma conta nesta página.</h3><p>{permissions.canWrite ? "Abra uma conta para começar a gerenciar os titulares." : "As contas vinculadas ao seu perfil aparecerão aqui."}</p>{permissions.canWrite && offset === 0 && <button className="primary" type="button" onClick={() => edit(null)}><Icon name="plus" />Nova conta</button>}</div>}
+        {!loading && items.length > 0 && !filtered.length && <div className="empty-state"><span className="state-symbol"><Icon name="search" /></span><h3>Nenhuma conta encontrada</h3><p>Revise os filtros aplicados a esta página.</p><button onClick={() => { setSearch(""); setStatusFilter("all"); }}>Limpar filtros</button></div>}
+        {filtered.length > 0 && <AccountTable items={filtered} canWrite={permissions.canWrite} canAssign={permissions.canAssign} busy={busy} onEdit={edit} onDelete={account => { closeOverlay(); setDeleting(account); }} onAssign={startAssignment} />}
+        <div className="panel-footer"><span className="list-note"><Icon name="document" />{filtered.length} {filtered.length === 1 ? "conta exibida" : "contas exibidas"} nesta página</span><nav aria-label="Páginas de contas" className="actions pager"><button disabled={!offset || loading || busy} onClick={() => void load(Math.max(0, offset - pageSize))}><Icon name="chevron" className="previous" />Anterior</button><span aria-current="page">Página {Math.floor(offset / pageSize) + 1}</span><button disabled={!hasNext || loading || busy} onClick={() => void load(offset + pageSize)}>Próxima<Icon name="chevron" /></button></nav></div>
+      </section>}
+    </main>
+    <footer className="site-footer"><div><span><strong>Banco KRT</strong> • Gestão de contas</span><span className="local-label"><span className="status-dot" />Ambiente local de demonstração</span></div></footer>
 
-      {assignment && permissions.canAssign && <Overlay kind="drawer"
-        title={assignment.kind === "portfolio" ? "Transferir carteira" : "Vincular titular"} subtitle={assignment.name} busy={busy} onClose={closeOverlay}>
-        <form className="overlay-form" onSubmit={event => {
-          event.preventDefault();
-          void write("PUT", `${base}/${assignment.id}/${assignment.kind}`, { subject }, () => {
-            closeOverlay();
-            setNotice(assignment.kind === "portfolio" ? "Carteira atualizada." : "Titular vinculado.");
-          });
-        }}>
-          <fieldset className="overlay-body" disabled={busy}>
-            <label htmlFor="subject">ID no Keycloak do {assignment.kind === "portfolio" ? "gerente" : "titular"}</label>
-            <input id="subject" required pattern="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
-              value={subject} onChange={event => setSubject(event.target.value)} autoFocus />
-            {error && <p className="feedback error" role="alert">{error}</p>}
-          </fieldset>
-          <div className="overlay-footer actions">
-            <button type="button" disabled={busy} onClick={closeOverlay}>Cancelar</button>
-            <button className="primary" type="submit" disabled={busy}>{busy ? "Salvando…" : "Confirmar vínculo"}</button>
-          </div>
-        </form>
-      </Overlay>}
+    {formOpen && permissions.canWrite && <Overlay kind="drawer" title={editing ? "Editar conta" : "Abrir nova conta"} subtitle={editing?.holderName ?? "Cadastro de um novo titular"} mode={editing ? "Edição de conta" : "Abertura de conta"} busy={busy} onClose={closeOverlay}><AccountForm editing={editing} draft={draft} setDraft={setDraft} busy={busy} error={error} onSave={save} onClose={closeOverlay} /></Overlay>}
 
-      {deleting && permissions.canWrite && <Overlay kind="danger" title={`Excluir a conta de ${deleting.holderName}?`} busy={busy} onClose={closeOverlay}>
-        <div className="overlay-body">
-          <div className="account-summary"><span>CPF do titular</span><code className="cpf">{deleting.cpf}</code></div>
-          <p className="feedback warning">A conta deixará de aparecer na lista.</p>
-          {error && <p className="feedback error" role="alert">{error}</p>}
-        </div>
-        <div className="overlay-footer actions">
-          <button type="button" disabled={busy} onClick={closeOverlay} autoFocus>Cancelar</button>
-          <button type="button" className="destructive" disabled={busy} onClick={() => void write("DELETE", `${base}/${deleting.id}`, null, () => {
-            closeOverlay();
-            setNotice("Conta excluída.");
-            requestAnimationFrame(() => refreshButton.current?.focus());
-          })}>{busy ? "Excluindo…" : "Confirmar exclusão"}</button>
-        </div>
-      </Overlay>}
-    </>
-  );
+    {assignment && permissions.canAssign && <Overlay kind="drawer" title={assignment.kind === "portfolio" ? "Transferir carteira" : "Vincular titular"} subtitle={assignment.name} mode="Administração de acesso" busy={busy} onClose={closeOverlay}>
+      <form className="overlay-form" onSubmit={event => {
+        event.preventDefault();
+        void write("PUT", `${base}/${assignment.id}/${assignment.kind}`, { subject }, () => { closeOverlay(); setNotice(assignment.kind === "portfolio" ? "Carteira atualizada." : "Titular vinculado."); });
+      }}><div className="overlay-body"><fieldset className="form-fields" disabled={busy}>
+        <div className="form-section-title"><Icon name={assignment.kind === "portfolio" ? "transfer" : "user"} /><div><h3>{assignment.kind === "portfolio" ? "Carteira do gerente" : "Acesso do titular"}</h3><p>{assignment.kind === "portfolio" ? "Defina o gerente responsável por esta conta." : "Vincule a conta ao usuário que poderá consultá-la."}</p></div></div>
+        <div className="record-id"><span className="section-label">Conta selecionada</span><strong>{assignment.name}</strong><code>{assignment.id}</code></div>
+        <div className="form-field"><label htmlFor="subject">ID no Keycloak do {assignment.kind === "portfolio" ? "gerente" : "titular"}</label><input id="subject" required pattern="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}" placeholder="00000000-0000-0000-0000-000000000000" value={subject} onChange={event => setSubject(event.target.value)} aria-describedby="subject-help" data-initial-focus /><p id="subject-help" className="field-hint">Informe o identificador do usuário com o perfil correspondente.</p></div>
+        <div className="feedback info"><Icon name="shield" /><div><strong>Permissão exclusiva do Operador</strong><p>{assignment.kind === "portfolio" ? "Ao transferir a conta, o gerente anterior perde acesso e o novo gerente passa a gerenciá-la." : "O cliente vinculado poderá consultar esta conta. As alterações continuam restritas aos perfis autorizados."}</p></div></div>
+        {error && <div className="feedback error" role="alert"><Icon name="warning" /><p>{error}</p></div>}
+      </fieldset></div><div className="overlay-footer actions"><button type="button" disabled={busy} onClick={closeOverlay}>Cancelar</button><button className="primary" type="submit" disabled={busy}><Icon name="check" />{busy ? "Salvando…" : "Confirmar vínculo"}</button></div></form>
+    </Overlay>}
+
+    {deleting && permissions.canWrite && <Overlay kind="danger" title={`Excluir a conta de ${deleting.holderName}?`} busy={busy} onClose={closeOverlay}>
+      <div className="overlay-body"><p className="deletion-description">Confira os dados antes de confirmar. A conta deixará de aparecer na lista e esta ação não pode ser desfeita pela aplicação.</p><dl className="account-summary"><div><dt>CPF do titular</dt><dd><code className="cpf">{deleting.cpf}</code></dd></div><div><dt>Status operacional</dt><dd><span className={`badge ${deleting.status}`}><span className="status-dot" />{deleting.status === "active" ? "Ativa" : "Inativa"}</span></dd></div><div className="summary-id"><dt>Identificador da conta</dt><dd><code>{deleting.id}</code></dd></div></dl><div className="feedback warning"><Icon name="info" /><p>Se deseja apenas suspender a conta, cancele e altere o status para <strong>Inativa</strong> na edição.</p></div>{error && <div className="feedback error" role="alert"><Icon name="warning" /><p>{error}</p></div>}</div>
+      <div className="overlay-footer actions"><button type="button" disabled={busy} onClick={closeOverlay} data-initial-focus>Cancelar</button><button type="button" className="destructive" disabled={busy} onClick={() => void write("DELETE", `${base}/${deleting.id}`, null, () => { closeOverlay(); setNotice("Conta excluída."); requestAnimationFrame(() => refreshButton.current?.focus()); })}><Icon name="trash" />{busy ? "Excluindo…" : "Confirmar exclusão"}</button></div>
+    </Overlay>}
+  </>;
 }

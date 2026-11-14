@@ -36,7 +36,7 @@ test("abre, reenvia após perda da resposta, altera e exclui pelo Nginx", async 
   await expect(row).toContainText("***.***.***-25");
   await row.getByRole("button", { name: /editar conta/i }).click();
   await page.getByLabel("Nome do titular").fill("Ana Atualizada E2E");
-  await page.getByLabel("Status").selectOption("inactive");
+  await page.getByRole("radio", { name: "Inativa", exact: true }).check();
   await page.getByRole("button", { name: "Salvar alterações" }).click();
   const updated = page.getByRole("row").filter({ hasText: "Ana Atualizada E2E" });
   await expect(updated).toContainText("Inativa");
