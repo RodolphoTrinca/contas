@@ -49,19 +49,29 @@ services:
       - ./keycloak-entrypoint.sh:/opt/keycloak/contas-entrypoint.sh:ro
     ports:
       - "127.0.0.1:${KEYCLOAK_PORT:-18090}:8080"
-  api:
-    build:
+  migrations:
+    build: &api-build
       context: ..
       dockerfile: src/Contas.Api/Dockerfile
+    command: ["--migrate"]
     environment:
+      <<: &accounts-env
+        ConnectionStrings__Accounts: Host=postgres;Database=contas;Username=contas;Password=contas-local
+        Redis__Connection: redis:6379,abortConnect=false
+      Seed__Enabled: ${ACCOUNTS_SEED:-false}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  api:
+    build: *api-build
+    environment:
+      <<: *accounts-env
       ASPNETCORE_URLS: http://+:5080
-      ConnectionStrings__Accounts: Host=postgres;Database=contas;Username=contas;Password=contas-local
-      Redis__Connection: redis:6379,abortConnect=false
       Auth__Issuer: http://localhost:${ACCOUNTS_PORT:-8080}/auth/realms/contas
       Auth__RequireHttps: "false"
       Auth__Metadata: http://keycloak:8080/auth/realms/contas/.well-known/openid-configuration
-      Seed__Enabled: ${ACCOUNTS_SEED:-false}
     depends_on:
+      migrations: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       keycloak: { condition: service_started }

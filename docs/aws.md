@@ -18,4 +18,15 @@ flowchart LR
 4. Usar o adaptador Redis já implementado com ElastiCache. Invalidar após o commit e repetir invalidações por evento. Usar versão monotônica ou marcador de versão no cache para impedir que leituras concorrentes repovoem uma versão antiga. Definir a tolerância a atraso e consultar a origem para operações que exigem leitura atual.
 5. Integrar identidade e autorização por operação, armazenar segredos no Secrets Manager, restringir permissões com IAM e limitar o Scalar ao ambiente apropriado. Acompanhar latência, acertos de cache, atraso de publicação e mensagens nas filas de falhas no CloudWatch.
 
-O perfil local já usa PostgreSQL, Redis e Keycloak. Na AWS, configure a identidade de produção, substitua a entrega local por SNS e SQS e aplique as migrações como uma etapa de release.
+O perfil local já usa PostgreSQL, Redis e Keycloak. Na AWS, configure a identidade de produção e substitua a entrega local por SNS e SQS.
+
+## Migrações no release
+
+A API inicia o servidor HTTP sem aplicar migrações ou executar seed. Use uma tarefa ECS avulsa para migrar o PostgreSQL antes de atualizar o serviço da API:
+
+1. Publique a imagem da API no ECR e fixe o mesmo digest na tarefa de migração e no serviço. Configure o comando da tarefa avulsa como `["--migrate"]`. O entrypoint da imagem executa `dotnet Contas.Api.dll --migrate` e encerra sem servir HTTP.
+2. Injete `ConnectionStrings__Accounts` a partir do Secrets Manager. A credencial da tarefa de migração deve poder modificar o schema. A credencial do serviço da API deve acessar somente os objetos e operações que usa, sem permissões de DDL. Configure as permissões dos novos objetos para essa credencial. Mantenha `Seed__Enabled` desabilitado em produção.
+3. Faça o pipeline aguardar o término da tarefa e verificar o código de saída do contêiner. Atualize o serviço somente após uma saída com código zero. Em caso de falha, interrompa o rollout e examine o erro antes de tentar novamente.
+4. Mantenha cada mudança de schema compatível com a versão anterior da API durante a atualização gradual. Adicione as estruturas novas primeiro, migre os consumidores e retire estruturas antigas em um release posterior.
+
+Quando o processo de release exigir revisão de SQL, gere e revise o script idempotente do EF Core e aplique-o como alternativa à tarefa de migração. [Documentação do EF Core sobre aplicação de migrações](https://learn.microsoft.com/pt-br/ef/core/managing-schemas/migrations/applying)

@@ -391,6 +391,7 @@
         "dependencies": {
           "Contas.Application": "[1.0.0, )",
           "Contas.Infrastructure": "[1.0.0, )",
+          "Mediator.Abstractions": "[3.0.2, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.12, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.12, )",
           "Scalar.AspNetCore": "[2.21.0, )",
@@ -400,7 +401,8 @@
       "contas.application": {
         "type": "Project",
         "dependencies": {
-          "Contas.Domain": "[1.0.0, )"
+          "Contas.Domain": "[1.0.0, )",
+          "Mediator.Abstractions": "[3.0.2, )"
         }
       },
       "contas.domain": {
@@ -413,6 +415,15 @@
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.4, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "StackExchange.Redis": "[2.9.32, )"
+        }
+      },
+      "Mediator.Abstractions": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "TytjnyN8gLObZBxkM7HHPFJF3LHtk6Y8mHW56ONuXRuVEK6Fmed3f0z79H9TpmoZQP2zQAIS4/0O9R2w0v02qw==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.0"
         }
       },
       "Microsoft.AspNetCore.Authentication.JwtBearer": {

@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080/"
+      "url": "http://localhost:18080/"
     }
   ],
   "paths": {
@@ -779,6 +779,130 @@
         }
       }
     },
+    "/api/v1/accounts/history": {
+      "get": {
+        "tags": [
+          "Contas"
+        ],
+        "summary": "Consulta o histórico de alterações de contas",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfAccountChangePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfObject"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfObject"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfObject"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfObject"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfObject"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfObject"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeOfObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/accounts/permissions": {
       "get": {
         "tags": [
@@ -1071,6 +1195,56 @@
   },
   "components": {
     "schemas": {
+      "AccountChangePage": {
+        "required": [
+          "items",
+          "nextBefore"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountChangeView"
+            }
+          },
+          "nextBefore": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AccountChangeView": {
+        "required": [
+          "id",
+          "accountId",
+          "action",
+          "actor",
+          "occurredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "AccountPermissions": {
         "required": [
           "canWrite",
@@ -1181,6 +1355,39 @@
           },
           "deleted": {
             "type": "boolean"
+          }
+        }
+      },
+      "EnvelopeOfAccountChangePage": {
+        "required": [
+          "data",
+          "error",
+          "traceId"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccountChangePage"
+              }
+            ]
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiError"
+              }
+            ]
+          },
+          "traceId": {
+            "type": "string"
           }
         }
       },

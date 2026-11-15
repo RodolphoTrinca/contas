@@ -47,7 +47,7 @@ try {
         stack { Invoke-Compose --profile api -f $debugCompose stop api-gateway debug-gateway; Invoke-Compose up --build -d nginx }
         api { Invoke-Compose -f $debugCompose stop nginx web debug-gateway; Invoke-Compose --profile api up --build -d api-gateway }
         infra { Invoke-Compose up -d postgres redis keycloak }
-        debug { Invoke-Compose --profile api stop nginx api-gateway api web; Invoke-Compose -f $debugCompose up -d postgres redis keycloak debug-gateway }
+        debug { Invoke-Compose --profile api stop nginx api-gateway api web; Invoke-Compose -f $debugCompose up --build -d debug-gateway }
         down { Invoke-Compose --profile api --profile demos down --remove-orphans }
     }
 }

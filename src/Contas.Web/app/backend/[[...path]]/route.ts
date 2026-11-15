@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { api, cookieName, origin } from "../../../lib/oidc";
+import { cookieName } from "../../../lib/server/oidc";
+import { accountsApiOptions, authOptions } from "../../../lib/server/server-options";
 
 type Context = { params: Promise<{ path?: string[] }> };
 
 async function forward(request: NextRequest, context: Context) {
   const token = request.cookies.get(cookieName)?.value;
   if (!token) return fail(401, "auth.required", "Entre para acessar as contas.");
-  if (request.method !== "GET" && request.headers.get("origin") !== origin)
+  if (request.method !== "GET" && request.headers.get("origin") !== authOptions.origin)
     return fail(403, "auth.origin_forbidden", "Origem não autorizada.");
   const path = (await context.params).path ?? [];
   const id = /^[a-f0-9-]{36}$/i;
   const allowed = path.length === 0 ||
-    (path.length === 1 && (id.test(path[0]) || (path[0] === "permissions" && request.method === "GET"))) ||
+    (path.length === 1 && (id.test(path[0]) || (["permissions", "history"].includes(path[0]) && request.method === "GET"))) ||
     (path.length === 2 && request.method === "PUT" && id.test(path[0]) && ["portfolio", "owner"].includes(path[1]));
   if (!allowed) return fail(404, "request.not_found", "Rota não encontrada.");
-  const target = api + "/api/v1/accounts" + (path.length ? "/" + path.join("/") : "") + request.nextUrl.search;
+  const target = accountsApiOptions.baseUrl + "/api/v1/accounts" + (path.length ? "/" + path.join("/") : "") + request.nextUrl.search;
   const headers = new Headers({ Authorization: "Bearer " + token });
   for (const name of ["content-type", "idempotency-key"]) {
     const value = request.headers.get(name);

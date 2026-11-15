@@ -30,8 +30,9 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta name="color-scheme" content="light${darkMode?then(' dark', '')}">
+    <meta name="color-scheme" content="light dark">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="${url.resourcesPath}/brand/theme.js"></script>
 
     <#if properties.meta?has_content>
         <#list properties.meta?split(' ') as meta>
@@ -57,27 +58,6 @@
             }
         }
     </script>
-    <#if darkMode>
-      <script type="module" async blocking="render">
-          <#outputformat "JavaScript">
-          const DARK_MODE_CLASS = ${properties.kcDarkModeClass?c};
-          const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-          updateDarkMode(mediaQuery.matches);
-          mediaQuery.addEventListener("change", (event) => updateDarkMode(event.matches));
-
-          function updateDarkMode(isEnabled) {
-            const { classList } = document.documentElement;
-
-            if (isEnabled) {
-              classList.add(DARK_MODE_CLASS);
-            } else {
-              classList.remove(DARK_MODE_CLASS);
-            }
-          }
-          </#outputformat>
-      </script>
-    </#if>
     <#if properties.scripts?has_content>
         <#list properties.scripts?split(' ') as script>
             <script src="${url.resourcesPath}/${script}" type="text/javascript"></script>
@@ -142,8 +122,9 @@
 <div class="${properties.kcLogin!}">
   <div class="${properties.kcLoginContainer!}">
     <header id="kc-header" class="krt-auth-brand">
-      <div class="krt-auth-identity"><img src="${url.resourcesPath}/brand/logo.png" alt="Banco KRT" width="112" height="63"><span>Console de operações</span></div>
-      <div class="krt-sso-label"><span aria-hidden="true">&#9672;</span> Autenticação centralizada (SSO)</div>
+      <div class="krt-auth-identity"><img class="krt-logo" src="${url.resourcesPath}/brand/logo.png" alt="Banco KRT" width="112" height="63"><span>Console de operações</span></div>
+      <div class="krt-auth-tools"><div class="krt-sso-label"><span aria-hidden="true">&#9672;</span> Autenticação centralizada (SSO)</div>
+      <div class="theme-switcher"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18V3Zm0 0a9 9 0 0 1 0 18M16 5v14M19 8v8" /></svg><label class="krt-sr-only" for="krt-appearance">Aparência</label><select id="krt-appearance" data-theme-choice><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></div></div>
     </header>
     <main class="${properties.kcLoginMain!}">
       <div class="${properties.kcLoginMainHeader!}">

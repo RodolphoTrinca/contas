@@ -4,7 +4,7 @@ A referência é a biblioteca `design_system_component_library_v2_banco_krt` do 
 
 ## Tokens e marca
 
-Os valores explícitos da seção **Tokens Visuais & Fundamentos** da v2 prevalecem sobre o `DESIGN.md` e sobre as configurações Tailwind divergentes do export:
+No tema claro, os valores explícitos da seção **Tokens Visuais & Fundamentos** da v2 prevalecem sobre o `DESIGN.md` e sobre as configurações Tailwind divergentes do export:
 
 | Token | Valor |
 |---|---|
@@ -17,6 +17,27 @@ Os valores explícitos da seção **Tokens Visuais & Fundamentos** da v2 prevale
 | Campos / botões / cartões | 8 / 12 / 16 px |
 
 A fonte Inter, sua licença, os tokens e o logo original referenciado pela v2 estão em `src/Contas.Web/public/brand`. A fonte e a marca são servidas localmente. O tema Keycloak usa os mesmos arquivos pelo Compose. Os ícones de interface são SVGs locais.
+
+## Aparência clara, escura e do sistema
+
+O seletor **Aparência**, disponível na entrada, no cabeçalho de contas e nas páginas do Keycloak, oferece **Sistema**, **Claro** e **Escuro**. Sistema é o padrão e acompanha mudanças da preferência do dispositivo. A escolha explícita prevalece sobre o sistema, permanece após recarregar e sincroniza entre abas.
+
+O tema escuro mantém a composição, tipografia e geometria da v2, com superfícies navy e cores semânticas próprias:
+
+| Uso | Cor no tema escuro |
+|---|---|
+| Fundo / superfície | `#080F1C` / `#101E31` |
+| Texto principal / secundário | `#E8EEF7` / `#C1CCDC` |
+| Ação primária / texto do botão | `#8DB9E8` / `#092039` |
+| Destaque verde | `#74DDCB` |
+| Sucesso | `#6EE7B7` sobre `#0D342D` |
+| Erro | `#FECACA` sobre `#3A1B28` |
+
+As duas paletas ficam em `src/Contas.Web/public/brand/tokens.css`. Os componentes usam tokens por função, como superfície, texto, ação e aviso. A marca original ganha uma apresentação monocromática clara por CSS no tema escuro. Listas, cartões, filtros, campos, diálogos, estados vazios e avisos usam a mesma aparência no desktop e no celular.
+
+O script compartilhado `public/brand/theme.js` aplica `data-theme` ao documento antes da interface React carregar. A preferência usa a chave `krt-appearance` do `localStorage`; escolher Sistema remove a escolha explícita. Se o armazenamento estiver bloqueado, a troca funciona na página atual, sem persistência. O componente `ThemeSwitcher` acompanha esse estado sem divergências de hidratação.
+
+Next.js e Keycloak recebem os mesmos tokens e script. A preferência atravessa login e saída porque ambos são servidos pela mesma origem pelo Nginx. Acesso direto por outra porta ou domínio tem armazenamento separado. O `darkMode=false` em `theme.properties` mantém desativado o mecanismo padrão do Keycloak; a aparência é controlada pelo script do Banco KRT para respeitar a escolha do usuário.
 
 ## Correspondência de telas
 
@@ -44,4 +65,4 @@ O Compose monta a pasta completa do tema e os recursos compartilhados. Um realm 
 
 ## Verificação
 
-`bash scripts/test.sh e2e` executa os fluxos reais de login, CRUD, idempotência, carteiras e isolamento de clientes. `tests/e2e/design-v2.spec.ts` acrescenta inspeções de layout em 1440, 768, 390 e 320 px, máscaras, filtros, foco e estados de erro. As capturas anexadas aos resultados permitem comparar cada tela com o export. Os dados fixos usados nesse teste visual são interceptados apenas no navegador de teste; os testes de negócio continuam usando PostgreSQL e Keycloak reais.
+`bash scripts/test.sh e2e` executa os fluxos reais de login, CRUD, idempotência, carteiras e isolamento de clientes. `tests/e2e/design-v2.spec.ts` acrescenta inspeções de layout nos temas claro e escuro em 1440, 768, 390 e 320 px, máscaras, filtros, foco e estados de erro. `tests/e2e/theme.spec.ts` verifica a escolha de aparência, preferência do sistema, persistência, sincronização entre abas, armazenamento indisponível e continuidade pelo Keycloak. As capturas anexadas aos resultados permitem comparar cada tela com o export. Os dados fixos usados nesse teste visual são interceptados apenas no navegador de teste; os testes de negócio continuam usando PostgreSQL e Keycloak reais.

@@ -9,8 +9,15 @@ public sealed class AccountsDb(DbContextOptions<AccountsDb> options) : DbContext
     internal DbSet<OutboxRecord> Outbox => Set<OutboxRecord>();
     internal DbSet<NotificationRecord> Inbox => Set<NotificationRecord>();
 
+    internal DbSet<AccountAuditEntry> AuditEntries => Set<AccountAuditEntry>();
+
     protected override void OnModelCreating(ModelBuilder model)
     {
+        var audit = model.Entity<AccountAuditEntry>();
+        audit.ToTable("account_changes", "audit");
+        audit.Property(row => row.Action).HasMaxLength(40);
+        audit.HasIndex(row => new { row.AccountId, row.Id });
+
         model.Entity<StoredAccount>().HasIndex(row => row.Cpf).IsUnique()
             .HasDatabaseName("accounts_cpf_current").HasFilter("NOT \"Deleted\"");
         model.Entity<StoredAccount>().Property(row => row.Version).IsConcurrencyToken();

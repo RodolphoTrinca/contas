@@ -1,10 +1,13 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 
 namespace Contas.PartnerDemo;
 
-internal sealed class PartnerClient(HttpClient client, PartnerSettings settings, ILogger<PartnerClient> logger)
+internal sealed class PartnerClient(HttpClient client, IOptions<PartnerOptions> options, ILogger<PartnerClient> logger)
 {
+    private readonly PartnerOptions settings = options.Value;
+
     internal async Task<IResult> Query(Guid id, CancellationToken ct)
     {
         try

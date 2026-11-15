@@ -1,5 +1,5 @@
 using System.Reflection;
-using Contas.Application;
+using Contas.Application.Accounts.Commands;
 using Contas.Domain;
 using Contas.Infrastructure.Persistence;
 using Xunit;
@@ -12,9 +12,9 @@ public sealed class DependencyTests
             reference => Assert.True(reference.Name?.StartsWith("System.", StringComparison.Ordinal), reference.FullName));
 
     [Fact]
-    public void ApplicationDependsOnlyOnDomainAndFramework()
-        => Assert.All(typeof(OpenAccount).Assembly.GetReferencedAssemblies(),
-            reference => Assert.True(reference.Name == "Contas.Domain" ||
+    public void ApplicationDependsOnlyOnDomainFrameworkAndMediatorAbstractions()
+        => Assert.All(typeof(OpenAccountCommand).Assembly.GetReferencedAssemblies(),
+            reference => Assert.True(reference.Name is "Contas.Domain" or "Mediator" ||
                 reference.Name?.StartsWith("System.", StringComparison.Ordinal) == true, reference.FullName));
 
     [Fact]

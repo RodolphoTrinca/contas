@@ -1,4 +1,6 @@
 using Contas.Application;
+using Contas.Application.Accounts.Commands;
+using Contas.Application.Accounts.Queries;
 using Contas.Domain;
 using Contas.Infrastructure.Cache;
 using Contas.Infrastructure.Persistence;
@@ -32,8 +34,8 @@ public sealed class PostgresRedisTests
         var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
         {
             await using var db = new AccountsDb(options);
-            return await new OpenAccount(Store(db), TimeProvider.System)
-                .Execute(scope, key, "Conta Integração", "52998224725", ct);
+            return await new OpenAccountHandler(Store(db), TimeProvider.System)
+                .Handle(new OpenAccountCommand(scope, key, "Conta Integração", "52998224725"), ct);
         }));
         Assert.All(results, result => Assert.True(result.IsSuccess, result.Error?.Code));
         Assert.Single(results, result => result.Value is { Replayed: false });
@@ -44,8 +46,9 @@ public sealed class PostgresRedisTests
 
         await using (var writeDb = new AccountsDb(options))
         {
-            var changed = await new ReviseAccount(Store(writeDb), TimeProvider.System)
-                .Execute(scope, Guid.NewGuid(), account.Id, "Conta Atualizada", AccountStatus.Inactive, ct);
+            var changed = await new ReviseAccountHandler(Store(writeDb), TimeProvider.System)
+                .Handle(new ReviseAccountCommand(scope, Guid.NewGuid(), account.Id, "Conta Atualizada",
+                    AccountStatus.Inactive), ct);
             Assert.True(changed.IsSuccess);
         }
         Assert.Null((await cache.Read(account.Id)).Account);
@@ -53,12 +56,12 @@ public sealed class PostgresRedisTests
 
         await using (var reopenedDb = new AccountsDb(options))
         {
-            var replay = await new OpenAccount(Store(reopenedDb), TimeProvider.System)
-                .Execute(scope, key, "Conta Integração", "52998224725", ct);
+            var replay = await new OpenAccountHandler(Store(reopenedDb), TimeProvider.System)
+                .Handle(new OpenAccountCommand(scope, key, "Conta Integração", "52998224725"), ct);
             Assert.Equal(account, replay.Value?.Account);
             Assert.True(replay.Value?.Replayed);
-            var conflict = await new OpenAccount(Store(reopenedDb), TimeProvider.System)
-                .Execute(scope, key, "Outra Conta", "52998224725", ct);
+            var conflict = await new OpenAccountHandler(Store(reopenedDb), TimeProvider.System)
+                .Handle(new OpenAccountCommand(scope, key, "Outra Conta", "52998224725"), ct);
             Assert.Equal("idempotency.key_conflict", conflict.Error?.Code);
         }
         await using var sql = new NpgsqlConnection(connection);
@@ -82,6 +85,56 @@ public sealed class PostgresRedisTests
             Assert.Equal(4L, await delivered.ExecuteScalarAsync(ct));
         }
         finally { await worker.StopAsync(CancellationToken.None); }
+
+        var operatorActor = $"contas-web:{Guid.NewGuid()}";
+        await using (var assignmentDb = new AccountsDb(options))
+        {
+            var assignment = new AccountAssignment(assignmentDb, TimeProvider.System, NullLogger<AccountAssignment>.Instance);
+            var manager = Guid.NewGuid();
+            Assert.True((await assignment.Transfer(account.Id, manager, operatorActor, ct)).IsSuccess);
+            Assert.True((await assignment.Transfer(account.Id, manager, operatorActor, ct)).IsSuccess);
+            Assert.True((await assignment.LinkOwner(account.Id, Guid.NewGuid(), operatorActor, ct)).IsSuccess);
+        }
+        await using (var deleteDb = new AccountsDb(options))
+        {
+            var deleted = await new DeleteAccountHandler(Store(deleteDb), TimeProvider.System)
+                .Handle(new DeleteAccountCommand(operatorActor, Guid.NewGuid(), account.Id), ct);
+            Assert.True(deleted.IsSuccess);
+        }
+
+        await using var audit = new NpgsqlCommand("""
+            SELECT "Action", "Actor", "OccurredAt"
+            FROM audit.account_changes
+            WHERE "AccountId" = $1
+            ORDER BY "Id"
+            """, sql);
+        audit.Parameters.AddWithValue(account.Id);
+        await using var rows = await audit.ExecuteReaderAsync(ct);
+        foreach (var (action, actor) in new[]
+        {
+            ("AccountCreated", scope), ("AccountUpdated", scope),
+            ("PortfolioAssigned", operatorActor), ("OwnerLinked", operatorActor),
+            ("AccountDeleted", operatorActor)
+        })
+        {
+            Assert.True(await rows.ReadAsync(ct));
+            Assert.Equal(action, rows.GetString(0));
+            Assert.Equal(actor, rows.GetString(1));
+            Assert.False(rows.IsDBNull(2));
+        }
+        Assert.False(await rows.ReadAsync(ct));
+
+        var history = new ListAccountChangesHandler(new AccountHistory(readDb, NullLogger<AccountHistory>.Instance));
+        var firstPage = await history.Handle(new ListAccountChangesQuery(account.Id, null, 2), ct);
+        Assert.True(firstPage.IsSuccess);
+        Assert.Equal(new[] { "AccountDeleted", "OwnerLinked" }, firstPage.Value!.Items.Select(item => item.Action));
+
+        Assert.True(long.TryParse(firstPage.Value.NextBefore, out var cursor));
+        var nextPage = await history.Handle(new ListAccountChangesQuery(account.Id, cursor, 100), ct);
+        Assert.True(nextPage.IsSuccess);
+        Assert.Equal(new[] { "PortfolioAssigned", "AccountUpdated", "AccountCreated" },
+            nextPage.Value!.Items.Select(item => item.Action));
+        Assert.Null(nextPage.Value.NextBefore);
 
         AccountStore Store(AccountsDb db) => new(db, cache, TimeProvider.System, NullLogger<AccountStore>.Instance);
     }

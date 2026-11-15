@@ -1,13 +1,14 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
-import { Brand } from "../components/Brand";
-import { Login } from "../components/Login";
-import { Overlay } from "../components/Overlay";
-import { Icon } from "../components/Icon";
-import { AccountForm } from "../components/AccountForm";
-import { AccountTable } from "../components/AccountTable";
-import type { Account, Draft } from "../lib/accounts";
+import { Brand } from "../components/ui/Brand";
+import { Login } from "../components/auth/Login";
+import { Overlay } from "../components/ui/Overlay";
+import { Icon } from "../components/ui/Icon";
+import { ThemeSwitcher } from "../components/ui/ThemeSwitcher";
+import { AccountForm } from "../features/accounts/AccountForm";
+import { AccountTable } from "../features/accounts/AccountTable";
+import type { Account, Draft } from "../features/accounts/accounts";
 
 const empty: Draft = { holderName: "", cpf: "", status: "active" };
 const pageSize = 20;
@@ -160,10 +161,14 @@ export default function Accounts() {
     <a className="skip-link" href="#workspace">Ir para as contas</a>
     <header className="topbar"><div className="topbar-inner">
       <div className="header-identity"><Brand /><span className="context-chip operation-chip">Operação interna <span>| Gestão de contas</span></span><nav aria-label="Navegação principal"><a href="/" aria-current="page">Contas</a></nav></div>
-      {(authenticated.current || forbidden) && <div className="header-session"><span className="session-chip"><span className="status-dot" />Sessão ativa</span><div className="profile"><span className="profile-icon"><Icon name="user" /></span><div><strong>{forbidden ? "Acesso restrito" : role}</strong><span>Banco KRT</span></div></div><form method="post" action="/auth/logout"><button type="submit" className="logout"><Icon name="logout" />Sair</button></form></div>}
+      <div className="header-session"><ThemeSwitcher />{(authenticated.current || forbidden) && <><span className="session-chip"><span className="status-dot" />Sessão ativa</span><div className="profile"><span className="profile-icon"><Icon name="user" /></span><div><strong>{forbidden ? "Acesso restrito" : role}</strong><span>Banco KRT</span></div></div><form method="post" action="/auth/logout"><button type="submit" className="logout"><Icon name="logout" />Sair</button></form></>}</div>
     </div></header>
 
     <main id="workspace" className="workspace">
+      {permissions.canAssign && !forbidden && <nav className="workspace-nav" aria-label="Área de trabalho">
+        <a href="/" aria-current="page">Contas</a>
+        <a href="/historico">Histórico de alterações</a>
+      </nav>}
       {notice && <div className="feedback success notice" role="status"><Icon name="check" /><p>{notice}</p><button className="icon-button" aria-label="Fechar notificação" onClick={() => setNotice("")}><Icon name="close" /></button></div>}
       <div className="page-intro"><div><p className="eyebrow">Gestão de contas <span>• {permissions.canAssign ? "Visão geral" : permissions.canWrite ? "Minha carteira" : "Minhas contas"}</span></p><h1>Contas</h1><p className="intro-description">{permissions.canAssign ? "Consulte e gerencie as contas cadastradas." : permissions.canWrite ? "Consulte e gerencie as contas da sua carteira." : "Consulte as contas disponíveis para o seu perfil."}</p></div>
         {!forbidden && <div className="intro-tools"><div className="sync-status"><span>Última atualização</span><strong>{lastUpdated ? lastUpdated.toLocaleTimeString("pt-BR") : "Carregando…"}</strong></div><div className="actions toolbar"><button ref={refreshButton} type="button" onClick={() => void load(offset)} disabled={loading || busy}><Icon name="refresh" className={loading ? "spinning" : ""} /><span>Atualizar lista</span></button>{permissions.canWrite && <button type="button" className="primary" disabled={busy || loading} onClick={() => edit(null)}><Icon name="plus" />Nova conta</button>}</div></div>}

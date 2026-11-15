@@ -10,4 +10,5 @@ services:
       - ./nginx/debug.conf.template:/opt/contas/debug.conf.template:ro
       - ./nginx/debug-entrypoint.sh:/opt/contas/debug-entrypoint.sh:ro
     depends_on:
-      - keycloak
+      keycloak: { condition: service_started }
+      migrations: { condition: service_completed_successfully }

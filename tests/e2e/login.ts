@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 export async function login(page: Page, username = "operador") {
   await page.goto("/");
-  await page.getByRole("link", { name: "Entrar com Keycloak" }).click();
+  await page.getByRole("link", { name: "Fazer login" }).click();
   await page.locator("#username").fill(username);
   await page.locator("#password").fill(username + "-local");
   await page.locator("#kc-login").click();

@@ -1,3 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup><ProjectReference Include="../Contas.Domain/Contas.Domain.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Contas.Domain/Contas.Domain.csproj" />
+    <PackageReference Include="Mediator.Abstractions" />
+  </ItemGroup>
 </Project>

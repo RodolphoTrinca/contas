@@ -53,7 +53,7 @@ case "$mode" in
   stack) "${compose[@]}" --profile api -f "$root/infra/compose.debug.yaml" stop api-gateway debug-gateway; "${compose[@]}" up --build -d nginx ;;
   api) "${compose[@]}" -f "$root/infra/compose.debug.yaml" stop nginx web debug-gateway; "${compose[@]}" --profile api up --build -d api-gateway ;;
   infra) "${compose[@]}" up -d postgres redis keycloak ;;
-  debug) "${compose[@]}" --profile api stop nginx api-gateway api web; "${compose[@]}" -f "$root/infra/compose.debug.yaml" up -d postgres redis keycloak debug-gateway ;;
+  debug) "${compose[@]}" --profile api stop nginx api-gateway api web; "${compose[@]}" -f "$root/infra/compose.debug.yaml" up --build -d debug-gateway ;;
   down) "${compose[@]}" --profile api --profile demos down --remove-orphans ;;
   *) echo "Uso: bash scripts/run.sh {stack|demos|api|infra|debug|down} [--seed|--no-seed]" >&2; exit 2 ;;
 esac

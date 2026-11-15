@@ -8,7 +8,7 @@ test("mantém autenticação, cartões e formulários utilizáveis no celular", 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Entrar no sistema" })).toBeVisible();
   expect(await noHorizontalScroll()).toBeTruthy();
-  await page.getByRole("link", { name: "Entrar com Keycloak" }).click();
+  await page.getByRole("link", { name: "Fazer login" }).click();
   await expect(page.locator('link[href$="/css/krt.css"]')).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Acesse sua conta de trabalho" })).toBeVisible();
   expect(await noHorizontalScroll()).toBeTruthy();

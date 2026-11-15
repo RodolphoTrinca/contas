@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { login } from "./login";
 
 test("abre, reenvia após perda da resposta, altera e exclui pelo Nginx", async ({ page }) => {
+  let accountId = "";
   const keys: string[] = [];
   const statuses: number[] = [];
   const replays: (string | undefined)[] = [];
@@ -10,6 +11,7 @@ test("abre, reenvia após perda da resposta, altera e exclui pelo Nginx", async 
     keys.push(route.request().headers()["idempotency-key"]);
     const response = await route.fetch();
     statuses.push(response.status());
+    if (response.ok()) accountId = (await response.json()).data.id;
     replays.push(response.headers()["idempotency-replayed"]);
     if (keys.length === 1) await route.abort("connectionreset");
     else await route.fulfill({ response });
@@ -47,6 +49,21 @@ test("abre, reenvia após perda da resposta, altera e exclui pelo Nginx", async 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Contas cadastradas" })).toBeVisible();
   await expect(updated).toHaveCount(0);
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.getByRole("link", { name: "Histórico de alterações" }).click();
+  await page.getByLabel("ID da conta").fill(accountId);
+  await page.getByRole("button", { name: "Filtrar", exact: true }).click();
+  const history = page.getByRole("list", { name: "Alterações" }).getByRole("listitem");
+  await expect(history).toHaveCount(3);
+  await expect(history.first()).toContainText("Exclusão de conta");
+  await expect(history.nth(1)).toContainText("Edição de conta");
+  await expect(history.last()).toContainText("Abertura de conta");
+  for (const item of await history.all()) {
+    await expect(item).toContainText(accountId);
+    await expect(item).toContainText(/contas-web:[0-9a-f-]{36}/i);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
 });
 
 test("publica Scalar e o contrato OpenAPI pelo Nginx", async ({ page, request }) => {
@@ -60,4 +77,16 @@ test("publica Scalar e o contrato OpenAPI pelo Nginx", async ({ page, request })
   const scalar = await page.goto("/scalar/v1");
   expect(scalar?.ok()).toBeTruthy();
   await expect(page).toHaveTitle(/scalar|api reference/i);
+});
+
+
+test("restringe o histórico ao Operador", async ({ page }) => {
+  expect((await page.request.get("/backend/history")).status()).toBe(401);
+  await login(page, "gerente-a");
+  await expect(page.getByRole("heading", { name: "Contas cadastradas" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Histórico de alterações" })).toHaveCount(0);
+  expect((await page.request.get("/backend/history")).status()).toBe(403);
+  await page.goto("/historico");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("apenas para o Operador");
+  await expect(page.getByRole("list", { name: "Alterações" })).toHaveCount(0);
 });

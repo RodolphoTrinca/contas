@@ -1,6 +1,8 @@
 <Project>
   <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
+    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.21.0" />
