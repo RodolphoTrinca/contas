@@ -5,7 +5,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $names = @('POSTGRES_PORT', 'REDIS_PORT', 'KEYCLOAK_PORT', 'ACCOUNTS_PORT',
-           'ACCOUNTS_SEED', 'ACCOUNTS_E2E_URL', 'CONTAS_TEST_POSTGRES', 'CONTAS_TEST_REDIS')
+           'ACCOUNTS_SEED', 'ACCOUNTS_E2E_URL', 'CONTAS_TEST_POSTGRES', 'CONTAS_TEST_REDIS',
+           'FRAUD_DEMO_PORT', 'CARDS_DEMO_PORT', 'MESSAGE_HISTORY_PORT', 'ACCOUNTS_HISTORY_URL',
+           'ACCOUNTS_FANOUT_PROJECT')
 $old = @{}
 foreach ($name in $names) { $old[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Invoke-Native {
@@ -34,7 +36,17 @@ function Invoke-Isolated {
             $env:ACCOUNTS_PORT = if ($old['ACCOUNTS_PORT']) { $old['ACCOUNTS_PORT'] } else { '18080' }
             $env:ACCOUNTS_SEED = 'false'
             $env:ACCOUNTS_E2E_URL = "http://localhost:$env:ACCOUNTS_PORT"
-            Invoke-Native docker ($compose + @('up', '--build', '-d', 'nginx'))
+            $targets = @('nginx')
+            if ($env:ACCOUNTS_TEST_FANOUT -eq 'true') {
+                $env:FRAUD_DEMO_PORT = if ($env:TEST_FRAUD_DEMO_PORT) { $env:TEST_FRAUD_DEMO_PORT } else { '25091' }
+                $env:CARDS_DEMO_PORT = if ($env:TEST_CARDS_DEMO_PORT) { $env:TEST_CARDS_DEMO_PORT } else { '25092' }
+                $env:MESSAGE_HISTORY_PORT = if ($env:TEST_MESSAGE_HISTORY_PORT) { $env:TEST_MESSAGE_HISTORY_PORT } else { '25093' }
+                $env:ACCOUNTS_HISTORY_URL = "http://localhost:$env:MESSAGE_HISTORY_PORT"
+                $env:ACCOUNTS_FANOUT_PROJECT = $project
+                $compose += @('-f', (Join-Path $root 'infra/compose.fanout.yaml'), '--profile', 'demos')
+                $targets += 'message-history'
+            }
+            Invoke-Native docker ($compose + @('up', '--build', '-d') + $targets)
             $ready = $false
             for ($i = 0; $i -lt 90; $i++) {
                 try {

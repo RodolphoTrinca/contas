@@ -1,0 +1,59 @@
+services:
+  floci:
+    image: &floci-image floci/floci:2.5.0-compat@sha256:e84b1be922a9406852d88d5c7cdf9f76cdf83045bcf21a39d35b80473e433f39
+    profiles: ["demos"]
+    environment:
+      FLOCI_HOSTNAME: floci
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_SERVICES_UI_ENABLED: "false"
+    volumes:
+      - floci-data:/app/data
+  messaging-init:
+    image: *floci-image
+    profiles: ["demos"]
+    entrypoint: ["python3", "/opt/contas/provision.py"]
+    depends_on:
+      floci: { condition: service_started }
+    environment:
+      AWS_ENDPOINT_URL: &broker http://floci:4566
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    volumes:
+      - ./messaging/provision.py:/opt/contas/provision.py:ro
+  api:
+    environment:
+      Messaging__Endpoint: *broker
+      Messaging__TopicArn: arn:aws:sns:us-east-1:000000000000:account-events
+    depends_on:
+      messaging-init: { condition: service_completed_successfully }
+  fraud-demo:
+    environment:
+      Messaging__Endpoint: *broker
+      Messaging__QueueUrl: http://floci:4566/000000000000/fraud-events
+      Messaging__Consumer: fraud
+      Messaging__DatabasePath: /data/messages.db
+    volumes:
+      - fraud-messages:/data
+  cards-demo:
+    environment:
+      Messaging__Endpoint: *broker
+      Messaging__QueueUrl: http://floci:4566/000000000000/cards-events
+      Messaging__Consumer: cards
+      Messaging__DatabasePath: /data/messages.db
+    volumes:
+      - cards-messages:/data
+  message-history:
+    image: nginx:stable-alpine
+    profiles: ["demos"]
+    ports:
+      - "127.0.0.1:${MESSAGE_HISTORY_PORT:-5093}:80"
+    volumes:
+      - ./messaging/history.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [web, fraud-demo, cards-demo]
+
+volumes:
+  floci-data:
+  fraud-messages:
+  cards-messages:

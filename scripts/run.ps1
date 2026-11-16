@@ -32,6 +32,7 @@ if (-not $PSBoundParameters.ContainsKey('Mode')) {
 }
 $compose = Join-Path (Split-Path $PSScriptRoot -Parent) 'infra/compose.yaml'
 $debugCompose = Join-Path (Split-Path $PSScriptRoot -Parent) 'infra/compose.debug.yaml'
+$fanout = Join-Path (Split-Path $PSScriptRoot -Parent) 'infra/compose.fanout.yaml'
 $previous = $env:ACCOUNTS_SEED
 $env:ACCOUNTS_SEED = ([bool]$Seed).ToString().ToLowerInvariant()
 function Invoke-Compose {
@@ -40,15 +41,15 @@ function Invoke-Compose {
 }
 try {
     if ($Mode -in @('stack', 'api', 'infra', 'debug')) {
-        Invoke-Compose --profile demos stop fraud-demo cards-demo
+        Invoke-Compose -f $fanout --profile demos stop message-history fraud-demo cards-demo floci
     }
     switch ($Mode) {
-        demos { Invoke-Compose --profile api -f $debugCompose stop api-gateway debug-gateway; Invoke-Compose --profile demos up --build -d nginx fraud-demo cards-demo }
+        demos { Invoke-Compose --profile api -f $debugCompose stop api-gateway debug-gateway; Invoke-Compose -f $fanout --profile demos up --build -d nginx message-history }
         stack { Invoke-Compose --profile api -f $debugCompose stop api-gateway debug-gateway; Invoke-Compose up --build -d nginx }
         api { Invoke-Compose -f $debugCompose stop nginx web debug-gateway; Invoke-Compose --profile api up --build -d api-gateway }
         infra { Invoke-Compose up -d postgres redis keycloak }
         debug { Invoke-Compose --profile api stop nginx api-gateway api web; Invoke-Compose -f $debugCompose up --build -d debug-gateway }
-        down { Invoke-Compose --profile api --profile demos down --remove-orphans }
+        down { Invoke-Compose -f $fanout --profile api --profile demos down --remove-orphans }
     }
 }
 finally {

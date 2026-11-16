@@ -45,15 +45,16 @@ case "$seed" in
   *) echo "Uso: bash scripts/run.sh {stack|demos|api|infra|debug|down} [--seed|--no-seed]" >&2; exit 2 ;;
 esac
 compose=(docker compose -f "$root/infra/compose.yaml")
+fanout="$root/infra/compose.fanout.yaml"
 case "$mode" in
-  stack|api|infra|debug) "${compose[@]}" --profile demos stop fraud-demo cards-demo ;;
+  stack|api|infra|debug) "${compose[@]}" -f "$fanout" --profile demos stop message-history fraud-demo cards-demo floci ;;
 esac
 case "$mode" in
-  demos) "${compose[@]}" --profile api -f "$root/infra/compose.debug.yaml" stop api-gateway debug-gateway; "${compose[@]}" --profile demos up --build -d nginx fraud-demo cards-demo ;;
+  demos) "${compose[@]}" --profile api -f "$root/infra/compose.debug.yaml" stop api-gateway debug-gateway; "${compose[@]}" -f "$fanout" --profile demos up --build -d nginx message-history ;;
   stack) "${compose[@]}" --profile api -f "$root/infra/compose.debug.yaml" stop api-gateway debug-gateway; "${compose[@]}" up --build -d nginx ;;
   api) "${compose[@]}" -f "$root/infra/compose.debug.yaml" stop nginx web debug-gateway; "${compose[@]}" --profile api up --build -d api-gateway ;;
   infra) "${compose[@]}" up -d postgres redis keycloak ;;
   debug) "${compose[@]}" --profile api stop nginx api-gateway api web; "${compose[@]}" -f "$root/infra/compose.debug.yaml" up --build -d debug-gateway ;;
-  down) "${compose[@]}" --profile api --profile demos down --remove-orphans ;;
+  down) "${compose[@]}" -f "$fanout" --profile api --profile demos down --remove-orphans ;;
   *) echo "Uso: bash scripts/run.sh {stack|demos|api|infra|debug|down} [--seed|--no-seed]" >&2; exit 2 ;;
 esac
