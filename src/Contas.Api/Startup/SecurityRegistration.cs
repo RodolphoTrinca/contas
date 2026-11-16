@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Contas.Api.Configuration;
 using Contas.Api.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -28,20 +29,39 @@ internal static class SecurityRegistration
     private static void AddAuthorizationPolicies(IServiceCollection services)
     {
         services.AddAuthorizationBuilder()
-            .AddPolicy(AuthorizationPolicies.Operator, policy => policy.RequireAuthenticatedUser().RequireClaim(TokenClaimNames.AuthorizedParty, KeycloakClients.Web)
-                .RequireAssertion(context => AccountIdentity.HasSubject(context.User) &&
-                    TokenRoles.Has(context.User, KeycloakRoles.Operator)))
-            .AddPolicy(AuthorizationPolicies.AccountRead, policy => policy.RequireAuthenticatedUser().RequireClaim(TokenClaimNames.AuthorizedParty, KeycloakClients.Web)
-                .RequireAssertion(context => TokenRoles.Has(context.User, KeycloakRoles.Operator) ||
-                    (Guid.TryParse(context.User.FindFirst(TokenClaimNames.Subject)?.Value, out _) &&
-                    (TokenRoles.Has(context.User, KeycloakRoles.Manager) || TokenRoles.Has(context.User, KeycloakRoles.Customer)))))
-            .AddPolicy(AuthorizationPolicies.AccountWrite, policy => policy.RequireAuthenticatedUser().RequireClaim(TokenClaimNames.AuthorizedParty, KeycloakClients.Web)
-                .RequireAssertion(context => AccountIdentity.HasSubject(context.User) &&
-                    (TokenRoles.Has(context.User, KeycloakRoles.Operator) ||
-                     TokenRoles.Has(context.User, KeycloakRoles.Manager))))
-            .AddPolicy(AuthorizationPolicies.Fraud, policy => policy.RequireAuthenticatedUser().RequireClaim(TokenClaimNames.AuthorizedParty, KeycloakClients.FraudApi)
-                .RequireAssertion(context => TokenRoles.Has(context.User, KeycloakRoles.FraudReader)))
-            .AddPolicy(AuthorizationPolicies.Cards, policy => policy.RequireAuthenticatedUser().RequireClaim(TokenClaimNames.AuthorizedParty, KeycloakClients.CardsApi)
-                .RequireAssertion(context => TokenRoles.Has(context.User, KeycloakRoles.CardsReader)));
+            .AddPolicy(AuthorizationPolicies.Operator, ConfigureOperator)
+            .AddPolicy(AuthorizationPolicies.AccountRead, ConfigureAccountRead)
+            .AddPolicy(AuthorizationPolicies.AccountWrite, ConfigureAccountWrite)
+            .AddPolicy(AuthorizationPolicies.Fraud, ConfigureFraud)
+            .AddPolicy(AuthorizationPolicies.Cards, ConfigureCards);
     }
+
+    private static void ConfigureOperator(AuthorizationPolicyBuilder policy)
+        => RequireClient(policy, KeycloakClients.Web)
+            .RequireAssertion(context => AccountIdentity.HasSubject(context.User) &&
+                TokenRoles.Has(context.User, KeycloakRoles.Operator));
+
+    private static void ConfigureAccountRead(AuthorizationPolicyBuilder policy)
+        => RequireClient(policy, KeycloakClients.Web)
+            .RequireAssertion(context => TokenRoles.Has(context.User, KeycloakRoles.Operator) ||
+                (Guid.TryParse(context.User.FindFirst(TokenClaimNames.Subject)?.Value, out _) &&
+                 (TokenRoles.Has(context.User, KeycloakRoles.Manager) ||
+                  TokenRoles.Has(context.User, KeycloakRoles.Customer))));
+
+    private static void ConfigureAccountWrite(AuthorizationPolicyBuilder policy)
+        => RequireClient(policy, KeycloakClients.Web)
+            .RequireAssertion(context => AccountIdentity.HasSubject(context.User) &&
+                (TokenRoles.Has(context.User, KeycloakRoles.Operator) ||
+                 TokenRoles.Has(context.User, KeycloakRoles.Manager)));
+
+    private static void ConfigureFraud(AuthorizationPolicyBuilder policy)
+        => RequireClient(policy, KeycloakClients.FraudApi)
+            .RequireAssertion(context => TokenRoles.Has(context.User, KeycloakRoles.FraudReader));
+
+    private static void ConfigureCards(AuthorizationPolicyBuilder policy)
+        => RequireClient(policy, KeycloakClients.CardsApi)
+            .RequireAssertion(context => TokenRoles.Has(context.User, KeycloakRoles.CardsReader));
+
+    private static AuthorizationPolicyBuilder RequireClient(AuthorizationPolicyBuilder policy, string client)
+        => policy.RequireAuthenticatedUser().RequireClaim(TokenClaimNames.AuthorizedParty, client);
 }
