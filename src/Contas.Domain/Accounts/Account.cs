@@ -27,9 +27,10 @@ public sealed class Account
     public static Account Restore(Guid id, string name, Cpf cpf, AccountStatus status, long version, bool deleted)
         => new(id, name, cpf) { Status = status, Version = version, Deleted = deleted };
 
-    public Result<bool> Revise(string? name, AccountStatus? status, DateTimeOffset now)
+    public Result<bool> Revise(string? name, AccountStatus? status, long expectedVersion, DateTimeOffset now)
     {
         if (Deleted) return AlreadyDeleted();
+        if (Version != expectedVersion) return StaleVersion();
         var validatedName = ValidateName(name);
         if (!validatedName.IsSuccess) return Result<bool>.Failure(validatedName.Error);
         if (status is not AccountStatus next || !Enum.IsDefined(next))
@@ -42,13 +43,17 @@ public sealed class Account
         return Result<bool>.Success(true);
     }
 
-    public Result<bool> Delete(DateTimeOffset now)
+    public Result<bool> Delete(long expectedVersion, DateTimeOffset now)
     {
         if (Deleted) return AlreadyDeleted();
+        if (Version != expectedVersion) return StaleVersion();
         Deleted = true;
         Record("AccountDeleted", now);
         return Result<bool>.Success(true);
     }
+
+    private static Result<bool> StaleVersion() =>
+        Result<bool>.Failure(new("account.stale_version", "A conta mudou. Atualize a lista antes de tentar novamente.", ErrorKind.Conflict));
 
     private static Result<bool> AlreadyDeleted() =>
         Result<bool>.Failure(new("account.deleted", "A conta foi excluída.", ErrorKind.Conflict));

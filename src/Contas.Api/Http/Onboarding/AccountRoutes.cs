@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Contas.Api.Security;
 using Contas.Application;
 using Contas.Application.Accounts.Commands;
@@ -10,6 +12,8 @@ namespace Contas.Api.Http.Onboarding;
 
 internal static class AccountRoutes
 {
+    private const string ExpectedVersionHeader = "Expected-Version";
+
     internal const string Prefix = "/accounts";
 
     internal static void MapAccountRoutes(this RouteGroupBuilder v1)
@@ -102,21 +106,25 @@ internal static class AccountRoutes
     }
 
     private static async Task<IResult> ReviseAccount(Guid id, [FromHeader(Name = IdempotencyHeaders.Key)] Guid key,
+        [FromHeader(Name = ExpectedVersionHeader)] long expectedVersion,
         ReviseRequest body, ISender sender, HttpContext http, CancellationToken ct)
     {
         if (key == Guid.Empty) return InvalidKey(http);
+        if (expectedVersion < 1) return InvalidVersion(http);
 
-        var command = new ReviseAccountCommand(AccountIdentity.Scope(http.User), key, id, body.HolderName, body.Status,
+        var command = new ReviseAccountCommand(AccountIdentity.Scope(http.User), key, id, expectedVersion, body.HolderName, body.Status,
             AccountIdentity.Access(http.User));
         return Responses.Write(http, await sender.Send(command, ct), account => account);
     }
 
     private static async Task<IResult> DeleteAccount(Guid id, [FromHeader(Name = IdempotencyHeaders.Key)] Guid key,
+        [FromHeader(Name = ExpectedVersionHeader)] long expectedVersion,
         ISender sender, HttpContext http, CancellationToken ct)
     {
         if (key == Guid.Empty) return InvalidKey(http);
+        if (expectedVersion < 1) return InvalidVersion(http);
 
-        var command = new DeleteAccountCommand(AccountIdentity.Scope(http.User), key, id,
+        var command = new DeleteAccountCommand(AccountIdentity.Scope(http.User), key, id, expectedVersion,
             AccountIdentity.Access(http.User));
         return Responses.Write(http, await sender.Send(command, ct), account => new DeletedAccount(account.Id, true));
     }
@@ -146,8 +154,14 @@ internal static class AccountRoutes
     private static IResult GetPermissions(HttpContext http)
     {
         var access = AccountIdentity.Access(http.User);
+        var scope = AccountIdentity.Scope(http.User);
+        http.Response.Headers[IdempotencyHeaders.Scope] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scope)));
         return Responses.Ok(http, new AccountPermissions(access is null or { IsManager: true }, access is null));
     }
+
+    private static IResult InvalidVersion(HttpContext http)
+        => Responses.Fail(http, StatusCodes.Status400BadRequest, "account.invalid_version",
+            "Informe a versão da conta no cabeçalho Expected-Version.");
 
     private static IResult InvalidKey(HttpContext http)
         => Responses.Fail(http, StatusCodes.Status400BadRequest, "idempotency.invalid_key",

@@ -31,14 +31,33 @@ public sealed class AccountTests
     public void NoOpDoesNotAdvanceVersionAndDeletionIsTerminal()
     {
         var account = Assert.IsType<Account>(Account.Open("Ana Lima", "52998224725", Now).Value);
-        Assert.False(account.Revise("Ana Lima", AccountStatus.Active, Now).Value);
+        Assert.False(account.Revise("Ana Lima", AccountStatus.Active, account.Version, Now).Value);
         Assert.Equal(1, account.Version);
-        Assert.True(account.Revise("Ana Lima", AccountStatus.Inactive, Now).Value);
+        Assert.True(account.Revise("Ana Lima", AccountStatus.Inactive, account.Version, Now).Value);
         Assert.Equal("AccountUpdated", account.PendingEvent?.Type);
-        Assert.True(account.Delete(Now).Value);
+        Assert.True(account.Delete(account.Version, Now).Value);
         Assert.Equal(3, account.Version);
         Assert.Equal("AccountDeleted", account.PendingEvent?.Type);
-        Assert.Equal("account.deleted", account.Revise("Ana Lima", AccountStatus.Active, Now).Error?.Code);
-        Assert.Equal("account.deleted", account.Delete(Now).Error?.Code);
+        Assert.Equal("account.deleted", account.Revise("Ana Lima", AccountStatus.Active, account.Version, Now).Error?.Code);
+        Assert.Equal("account.deleted", account.Delete(account.Version, Now).Error?.Code);
+    }
+
+    [Fact]
+    public void StaleWritesCannotChangeAccountOrCreateAnotherEvent()
+    {
+        var account = Account.Open("Ana Lima", "52998224725", Now).Value!;
+        var originalVersion = account.Version;
+        Assert.True(account.Revise("Ana Silva", AccountStatus.Inactive, originalVersion, Now).IsSuccess);
+        var acceptedEvent = account.PendingEvent;
+
+        var duplicate = account.Revise("Ana Silva", AccountStatus.Inactive, originalVersion, Now);
+        var staleDelete = account.Delete(originalVersion, Now);
+
+        Assert.Equal("account.stale_version", duplicate.Error?.Code);
+        Assert.Equal("account.stale_version", staleDelete.Error?.Code);
+        Assert.Same(acceptedEvent, account.PendingEvent);
+        Assert.Equal(originalVersion + 1, account.Version);
+        Assert.Equal("Ana Silva", account.HolderName);
+        Assert.False(account.Deleted);
     }
 }

@@ -10,6 +10,8 @@ import { AccountForm } from "../features/accounts/AccountForm";
 import { AccountTable } from "../features/accounts/AccountTable";
 import type { Account, Draft } from "../features/accounts/accounts";
 
+import { isDefinitiveStatus, prepareWrite } from "../features/accounts/pending-write";
+
 const empty: Draft = { holderName: "", cpf: "", status: "active" };
 const pageSize = 20;
 const base = "/backend";
@@ -36,7 +38,7 @@ export default function Accounts() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [deleting, setDeleting] = useState<Account | null>(null);
   const [busy, setBusy] = useState(false);
-  const pending = useRef(new Map<string, string>());
+  const writeScope = useRef<string | null>(null);
   const inFlight = useRef(false);
   const requestNumber = useRef(0);
   const refreshButton = useRef<HTMLButtonElement>(null);
@@ -71,6 +73,7 @@ export default function Accounts() {
       const { data: accounts }: { data: Account[] } = await response.json();
       if (request !== requestNumber.current) return;
       authenticated.current = true;
+      writeScope.current = permissionResponse.headers.get("idempotency-scope");
       setForbidden(false);
       setLoginReason(null);
       setPermissions(nextPermissions);
@@ -87,30 +90,45 @@ export default function Accounts() {
 
   useEffect(() => { void load(0); }, [load]);
 
-  async function write(method: string, url: string, body: object | null, done: () => void) {
+  async function write(method: string, url: string, body: object | null, done: () => void, expectedVersion?: number) {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
     setNotice("");
     const content = body === null ? undefined : JSON.stringify(body);
-    const fingerprint = JSON.stringify([method, url, content]);
-    const key = pending.current.get(fingerprint) ?? crypto.randomUUID();
-    pending.current.set(fingerprint, key);
     try {
-      const response = await fetch(url, {
-        method, body: content,
-        headers: { "Idempotency-Key": key, ...(content ? { "Content-Type": "application/json" } : {}) },
-      });
+      const headers = new Headers(content ? { "Content-Type": "application/json" } : undefined);
+      let finish = () => {};
+      if (method === "POST" || expectedVersion !== undefined) {
+        try {
+          const scope = writeScope.current;
+          if (!scope) throw new Error("Escopo de escrita indisponível.");
+          const storage = sessionStorage;
+          const attempt = await prepareWrite(storage, scope, method, url, content, expectedVersion);
+          if (!attempt) {
+            setError("O prazo de reenvio acabou. Confira a conta antes de iniciar outra tentativa.");
+            return;
+          }
+          headers.set("Idempotency-Key", attempt.key);
+          if (attempt.expectedVersion !== undefined)
+            headers.set("Expected-Version", String(attempt.expectedVersion));
+          finish = () => {
+            try { storage.removeItem(attempt.storageKey); } catch { /* Keep the pending key if storage is unavailable. */ }
+          };
+        } catch {
+          setError("Não foi possível salvar a chave de reenvio. A operação não foi enviada.");
+          return;
+        }
+      }
+      const response = await fetch(url, { method, body: content, headers });
+      if (isDefinitiveStatus(response.status)) finish();
       if (!response.ok) {
         if (response.status === 401) setLoginReason("expired");
         const problem = await response.json().catch(() => null);
-        if (response.status < 500 && response.status !== 408 && response.status !== 429)
-          pending.current.delete(fingerprint);
         setError(problem?.error?.message ?? "Não foi possível concluir a operação.");
         return;
       }
-      pending.current.delete(fingerprint);
       done();
       await load(0);
     } catch {
@@ -147,7 +165,7 @@ export default function Accounts() {
     const current = editing;
     void write(current ? "PUT" : "POST", current ? `${base}/${current.id}` : base,
       current ? { holderName: draft.holderName, status: draft.status } : { holderName: draft.holderName, cpf: draft.cpf },
-      () => { closeOverlay(); setNotice(current ? "Conta atualizada." : "Conta aberta."); });
+      () => { closeOverlay(); setNotice(current ? "Conta atualizada." : "Conta aberta."); }, current?.version);
   }
 
   if (loginReason) return <Login reason={loginReason} />;
@@ -204,7 +222,7 @@ export default function Accounts() {
 
     {deleting && permissions.canWrite && <Overlay kind="danger" title={`Excluir a conta de ${deleting.holderName}?`} busy={busy} onClose={closeOverlay}>
       <div className="overlay-body"><p className="deletion-description">Confira os dados antes de confirmar. A conta deixará de aparecer na lista e esta ação não pode ser desfeita pela aplicação.</p><dl className="account-summary"><div><dt>CPF do titular</dt><dd><code className="cpf">{deleting.cpf}</code></dd></div><div><dt>Status operacional</dt><dd><span className={`badge ${deleting.status}`}><span className="status-dot" />{deleting.status === "active" ? "Ativa" : "Inativa"}</span></dd></div><div className="summary-id"><dt>Identificador da conta</dt><dd><code>{deleting.id}</code></dd></div></dl><div className="feedback warning"><Icon name="info" /><p>Se deseja apenas suspender a conta, cancele e altere o status para <strong>Inativa</strong> na edição.</p></div>{error && <div className="feedback error" role="alert"><Icon name="warning" /><p>{error}</p></div>}</div>
-      <div className="overlay-footer actions"><button type="button" disabled={busy} onClick={closeOverlay} data-initial-focus>Cancelar</button><button type="button" className="destructive" disabled={busy} onClick={() => void write("DELETE", `${base}/${deleting.id}`, null, () => { closeOverlay(); setNotice("Conta excluída."); requestAnimationFrame(() => refreshButton.current?.focus()); })}><Icon name="trash" />{busy ? "Excluindo…" : "Confirmar exclusão"}</button></div>
+      <div className="overlay-footer actions"><button type="button" disabled={busy} onClick={closeOverlay} data-initial-focus>Cancelar</button><button type="button" className="destructive" disabled={busy} onClick={() => void write("DELETE", `${base}/${deleting.id}`, null, () => { closeOverlay(); setNotice("Conta excluída."); requestAnimationFrame(() => refreshButton.current?.focus()); }, deleting.version)}><Icon name="trash" />{busy ? "Excluindo…" : "Confirmar exclusão"}</button></div>
     </Overlay>}
   </>;
 }

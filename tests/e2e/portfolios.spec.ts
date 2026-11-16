@@ -21,10 +21,12 @@ test("gerente opera só na carteira, cliente só consulta e operador transfere",
   const data = { holderName: "Conta Carteira E2E", cpf: "11144477735" };
   const created = await request.post(base, { headers: headers(a, key), data });
   expect(created.status()).toBe(201);
-  const { data: { id } } = await created.json();
+  const { data: { id, version } } = await created.json();
   const path = base + "/" + id;
   const read = (path: string, token: string) => request.get(path, { headers: headers(token) });
-  const revise = (token: string, status: string) => request.put(path, { headers: headers(token), data: { holderName: data.holderName, status } });
+  let expectedVersion = version;
+  const writeHeaders = (token: string) => ({ ...headers(token), "Expected-Version": String(expectedVersion) });
+  const revise = (token: string, status: string) => request.put(path, { headers: writeHeaders(token), data: { holderName: data.holderName, status } });
   const assign = (token: string, kind: string, subject: string) => request.put(path + "/" + kind, { headers: headers(token), data: { subject } });
   const managerSubject = "74113d8a-7870-4e36-a8f8-141a69a8a602";
   const ownerSubject = "74113d8a-7870-4e36-a8f8-141a69a8a603";
@@ -33,10 +35,18 @@ test("gerente opera só na carteira, cliente só consulta e operador transfere",
   expect((await read(path, a)).status()).toBe(200);
   expect((await read(path, b)).status()).toBe(404);
   expect((await revise(b, "inactive")).status()).toBe(404);
-  expect((await request.delete(path, { headers: headers(b) })).status()).toBe(404);
+  expect((await request.delete(path, { headers: writeHeaders(b) })).status()).toBe(404);
   expect((await assign(a, "portfolio", managerSubject)).status()).toBe(403);
-  expect((await revise(a, "inactive")).status()).toBe(200);
+  const editHeaders = writeHeaders(a);
+  const editData = { holderName: data.holderName, status: "inactive" };
+  expect((await request.put(path, { headers: editHeaders, data: editData })).status()).toBe(200);
+  const replay = await request.put(path, { headers: editHeaders, data: editData });
+  expect(replay.status()).toBe(200);
+  expect(replay.headers()["idempotency-replayed"]).toBe("true");
+  expect((await revise(a, "active")).status()).toBe(409);
+  expectedVersion++;
   expect((await revise(a, "active")).status()).toBe(200);
+  expectedVersion++;
 
   expect((await read(path, customer)).status()).toBe(404);
   expect((await assign(operator, "owner", ownerSubject)).status()).toBe(200);
@@ -49,6 +59,6 @@ test("gerente opera só na carteira, cliente só consulta e operador transfere",
   expect((await (await read(base, a)).json()).data).toEqual([]);
   expect((await (await read(base, b)).json()).data.map((row: { id: string }) => row.id)).toEqual([id]);
   expect((await request.post(base, { headers: headers(a, key), data })).status()).toBe(404);
-  expect((await request.delete(path, { headers: headers(b) })).status()).toBe(200);
+  expect((await request.delete(path, { headers: writeHeaders(b) })).status()).toBe(200);
   expect((await read(path, customer)).status()).toBe(404);
 });

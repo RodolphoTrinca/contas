@@ -39,7 +39,7 @@ test("clientes de serviço só acessam a rota de sua role", async ({ request, pa
   expect((await request.get(fraud, { headers })).status()).toBe(403);
   expect((await request.get(cards, { headers })).status()).toBe(403);
   const deleted = await request.delete("/api/v1/accounts/" + account.id, {
-    headers: { ...headers, "Idempotency-Key": randomUUID() },
+    headers: { ...headers, "Idempotency-Key": randomUUID(), "Expected-Version": String(account.version) },
   });
   expect(deleted.status()).toBe(200);
   expect(await deleted.json()).toMatchObject({ data: { id: account.id, deleted: true }, error: null });

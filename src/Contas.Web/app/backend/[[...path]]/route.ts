@@ -17,7 +17,7 @@ async function forward(request: NextRequest, context: Context) {
   if (!allowed) return fail(404, "request.not_found", "Rota não encontrada.");
   const target = accountsApiOptions.baseUrl + "/api/v1/accounts" + (path.length ? "/" + path.join("/") : "") + request.nextUrl.search;
   const headers = new Headers({ Authorization: "Bearer " + token });
-  for (const name of ["content-type", "idempotency-key"]) {
+  for (const name of ["content-type", "idempotency-key", "expected-version"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -28,7 +28,7 @@ async function forward(request: NextRequest, context: Context) {
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
     const output = new Headers({ "Cache-Control": "no-store" });
-    for (const name of ["content-type", "location", "idempotency-replayed"]) {
+    for (const name of ["content-type", "location", "idempotency-replayed", "idempotency-scope"]) {
       const value = result.headers.get(name);
       if (value) output.set(name, value);
     }

@@ -47,7 +47,7 @@ public sealed class PostgresRedisTests
         await using (var writeDb = new AccountsDb(options))
         {
             var changed = await new ReviseAccountHandler(Store(writeDb), TimeProvider.System)
-                .Handle(new ReviseAccountCommand(scope, Guid.NewGuid(), account.Id, "Conta Atualizada",
+                .Handle(new ReviseAccountCommand(scope, Guid.NewGuid(), account.Id, account.Version, "Conta Atualizada",
                     AccountStatus.Inactive), ct);
             Assert.True(changed.IsSuccess);
         }
@@ -98,7 +98,7 @@ public sealed class PostgresRedisTests
         await using (var deleteDb = new AccountsDb(options))
         {
             var deleted = await new DeleteAccountHandler(Store(deleteDb), TimeProvider.System)
-                .Handle(new DeleteAccountCommand(operatorActor, Guid.NewGuid(), account.Id), ct);
+                .Handle(new DeleteAccountCommand(operatorActor, Guid.NewGuid(), account.Id, account.Version + 1), ct);
             Assert.True(deleted.IsSuccess);
         }
 

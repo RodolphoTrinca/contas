@@ -25,3 +25,7 @@ Os endpoints de negócio usam `/api/v1`. O sucesso retorna `data`, `error: null`
 - Gerente consulta, altera e exclui somente contas da sua carteira. Uma conta aberta pelo gerente é atribuída a ele na criação.
 - Cliente consulta somente a conta vinculada a sua identidade. A API bloqueia operações de escrita.
 - Consultas e alterações por ID fora do escopo retornam 404. Após uma transferência, a API verifica novamente a carteira antes de devolver um recibo de idempotência.
+
+Edição e exclusão exigem o cabeçalho `Expected-Version` com o campo `version` retornado na consulta da conta. Uma versão obsoleta retorna `409`. Para repetir uma tentativa após timeout, reenvie a mesma chave e a versão original. O recibo é consultado antes de verificar a versão atual.
+
+A interface guarda na sessão da aba a chave, a versão original e o horário da tentativa, indexados por usuário e pela impressão SHA-256 da operação. O corpo da requisição não é salvo. A recarga da mesma aba preserva o reenvio. Se o armazenamento estiver indisponível, a interface avisa e bloqueia a escrita. Ao expirar a janela local de 24 horas, o reenvio é bloqueado nessa aba para evitar que uma tentativa antiga seja tratada automaticamente como nova.

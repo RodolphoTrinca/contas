@@ -25,6 +25,10 @@ test("abre, reenvia após perda da resposta, altera e exclui pelo Nginx", async 
   const open = page.getByRole("button", { name: "Abrir conta", exact: true });
   await open.click();
   await expect(page.getByRole("alert").filter({ hasText: "A conexão falhou" })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Nova conta", exact: true }).first().click();
+  await page.getByLabel("Nome do titular").fill("Ana Teste E2E");
+  await page.getByLabel("CPF", { exact: true }).fill("529.982.247-25");
   await open.click();
   await expect(page.getByText("Conta aberta.")).toBeVisible();
   expect(keys).toHaveLength(2);
@@ -74,6 +78,11 @@ test("publica Scalar e o contrato OpenAPI pelo Nginx", async ({ page, request })
   expect(contract.paths["/api/v1/accounts"].post.parameters).toEqual(
     expect.arrayContaining([expect.objectContaining({ name: "Idempotency-Key", in: "header", required: true })]),
   );
+  for (const method of ["put", "delete"]) {
+    expect(contract.paths["/api/v1/accounts/{id}"][method].parameters).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Expected-Version", in: "header", required: true })]),
+    );
+  }
   const scalar = await page.goto("/scalar/v1");
   expect(scalar?.ok()).toBeTruthy();
   await expect(page).toHaveTitle(/scalar|api reference/i);
