@@ -1,34 +1,73 @@
-# Proposta de produção na AWS
+# Proposta de implantação na AWS
+
+[Início](../README.md) · [Arquitetura](arquitetura.md) · [Mensageria](mensageria.md)
+
+O repositório executa a stack local com Docker Compose. Esta página descreve a implantação proposta na AWS e as adaptações necessárias para operá-la em produção.
+
+## Topologia proposta
 
 ```mermaid
 flowchart LR
-    ALB --> Next["Next.js · ECS Fargate"]
-    ALB --> API["API .NET 10 · ECS Fargate"]
-    API --> PG["RDS PostgreSQL"]
-    API --> Cache["ElastiCache"]
-    PG --> Worker["Publicador da Outbox"]
-    Worker --> SNS["Tópico SNS"]
-    SNS --> Fraud["SQS · Fraude"]
-    SNS --> Cards["SQS · Cartões"]
+    Browser[Navegador] --> ALB[ALB com TLS]
+    ALB --> Web[Next.js no ECS Fargate]
+    ALB --> API[API no ECS Fargate]
+    ALB --> KC[Keycloak de produção]
+    Web --> API
+    Web --> KC
+    API --> KC
+    API --> PG[(RDS PostgreSQL)]
+    API --> Cache[ElastiCache]
+    API --> SNS[SNS via worker da outbox]
+    SNS --> FQ[SQS Fraude]
+    SNS --> CQ[SQS Cartões]
+    FQ --> Fraud[Consumidor Fraude]
+    CQ --> Cards[Consumidor Cartões]
 ```
 
-1. Empacotar API e Next.js em imagens no ECR. Executar os serviços em ECS Fargate atrás de um Application Load Balancer com TLS. Encaminhar /api para a API e as demais rotas para o Next. Manter banco e cache em sub-redes privadas.
-2. Usar o adaptador EF Core e PostgreSQL já implementado com uma instância RDS. Manter conta, Outbox e recibo idempotente na mesma transação. Reservar a chave com restrição única por identidade autenticada e chave, comparar a impressão da operação e persistir a resposta antes do commit. Limpar recibos expirados em lotes.
-3. Usar um publicador que reserve lotes concorrentes no PostgreSQL e publique no SNS. Criar uma fila SQS e uma fila de mensagens não processadas para cada consumidor. Deduplicar pelo ID do evento e usar a versão da conta para lidar com entregas fora de ordem. Para fluxos que dependem de todas as transições em sequência, configurar SNS/SQS FIFO com grupo por ID de conta.
-4. Usar o adaptador Redis já implementado com ElastiCache. Invalidar após o commit e repetir invalidações por evento. Usar versão monotônica ou marcador de versão no cache para impedir que leituras concorrentes repovoem uma versão antiga. Definir a tolerância a atraso e consultar a origem para operações que exigem leitura atual.
-5. Integrar identidade e autorização por operação, armazenar segredos no Secrets Manager, restringir permissões com IAM e limitar o Scalar ao ambiente apropriado. Acompanhar latência, acertos de cache, atraso de publicação e mensagens nas filas de falhas no CloudWatch.
+| Serviço | Motivo da escolha | Preparação |
+|---|---|---|
+| ECR | Armazenar as imagens da API, web e consumidores | Fixar digest por release |
+| ECS Fargate | Executar contêineres sem administrar hosts | Definir CPU, memória, rede, escala e verificações de saúde |
+| ALB + certificado TLS | Entrada HTTPS e roteamento por caminho | Encaminhar `/api`, `/auth` e frontend aos serviços corretos |
+| RDS PostgreSQL | Preservar transações e restrições já usadas | Configurar backups, acesso privado e credenciais por função |
+| ElastiCache | Cache compartilhado entre réplicas | Validar conexão, TLS e tolerância a dados temporariamente antigos |
+| SNS + SQS + DLQs | Fan-out com consumo independente e recuperação de falhas | Criar políticas, assinaturas e monitoramento das filas |
+| Keycloak de produção | Manter OIDC e roles existentes | Configurar hostname, proxy, TLS, disponibilidade e banco persistente |
+| Secrets Manager + IAM | Segredos externos às imagens e identidade das tarefas | Conceder permissões por serviço |
+| CloudWatch | Centralizar logs e métricas operacionais | Configurar coleta, painéis e alarmes |
 
-O modo `demos` exercita SNS e SQS via Floci com o SDK da AWS. O publicador usa `Messaging__TopicArn` e `Messaging__Region` para apontar a um tópico real. Em produção, deixe `Messaging__Endpoint` ausente para usar o endpoint regional e as credenciais da tarefa ECS. Crie as filas e assinaturas SQS com entrega bruta, políticas que aceitem publicações do tópico e uma fila de mensagens não processadas por consumidor. Restrinja a tarefa publicadora a `sns:Publish` no tópico e cada consumidor à sua fila.
+## Adaptar a configuração
 
-A publicação é pelo menos uma vez. O worker só registra o sucesso após a confirmação do SNS, então uma falha entre essa confirmação e o commit pode gerar nova entrega. As demos deduplicam pelo ID de evento e só removem a mensagem do SQS após persistir o processamento em SQLite. Em produção, use um armazenamento durável compartilhado pela frota de cada consumidor. O publicador atual mantém o lock do lote durante as publicações. Para alto volume, separe a reserva dos eventos da chamada de rede usando uma reserva com expiração.
+- Configure `Messaging__TopicArn` e `Messaging__Region` para o SNS real. Deixe `Messaging__Endpoint` ausente para usar o endpoint regional e as credenciais da tarefa.
+- Em cada consumidor, configure a fila própria e uma assinatura com entrega bruta. Use `sns:Publish` no tópico para a API e permissões SQS restritas à fila do consumidor.
+- Substitua as credenciais locais de PostgreSQL, clientes Keycloak e administração por segredos do ambiente.
+- Configure `APP_ORIGIN`, emissores OIDC, audiência e destinos internos com os endereços de produção. Habilite HTTPS na validação de identidade.
+- Restrinja o acesso ao Scalar e ao painel de mensagens conforme os operadores autorizados. Os endpoints de histórico das demos precisam de autenticação para exposição pública.
 
 ## Migrações no release
 
-A API inicia o servidor HTTP sem aplicar migrações ou executar seed. Use uma tarefa ECS avulsa para migrar o PostgreSQL antes de atualizar o serviço da API:
+```mermaid
+flowchart LR
+    Build[Publicar imagem] --> Migrate[Tarefa ECS com --migrate]
+    Migrate --> Success{Código de saída zero?}
+    Success -->|Sim| Deploy[Atualizar serviço API]
+    Success -->|Falha| Stop[Interromper rollout e investigar]
+```
 
-1. Publique a imagem da API no ECR e fixe o mesmo digest na tarefa de migração e no serviço. Configure o comando da tarefa avulsa como `["--migrate"]`. O entrypoint da imagem executa `dotnet Contas.Api.dll --migrate` e encerra sem servir HTTP.
-2. Injete `ConnectionStrings__Accounts` a partir do Secrets Manager. A credencial da tarefa de migração deve poder modificar o schema. A credencial do serviço da API deve acessar somente os objetos e operações que usa, sem permissões de DDL. Configure as permissões dos novos objetos para essa credencial. Mantenha `Seed__Enabled` desabilitado em produção.
-3. Faça o pipeline aguardar o término da tarefa e verificar o código de saída do contêiner. Atualize o serviço somente após uma saída com código zero. Em caso de falha, interrompa o rollout e examine o erro antes de tentar novamente.
-4. Mantenha cada mudança de schema compatível com a versão anterior da API durante a atualização gradual. Adicione as estruturas novas primeiro, migre os consumidores e retire estruturas antigas em um release posterior.
+Use o mesmo digest na tarefa de migração e no serviço. A imagem executa `dotnet Contas.Api.dll --migrate` e encerra após aplicar o schema. Injete `ConnectionStrings__Accounts` e mantenha `Seed__Enabled=false`.
 
-Quando o processo de release exigir revisão de SQL, gere e revise o script idempotente do EF Core e aplique-o como alternativa à tarefa de migração. [Documentação do EF Core sobre aplicação de migrações](https://learn.microsoft.com/pt-br/ef/core/managing-schemas/migrations/applying)
+A credencial de migração precisa de permissão de DDL. A credencial da API deve acessar os objetos e operações necessários ao runtime. Mudanças de schema devem ser compatíveis com a versão anterior durante o rollout. Quando houver revisão de SQL, gere um script idempotente do EF Core para esse processo. [Aplicação de migrações](https://learn.microsoft.com/ef/core/managing-schemas/migrations/applying)
+
+## Pontos a concluir para produção
+
+| Área | Situação atual | Evolução necessária |
+|---|---|---|
+| Publicador | Lock transacional mantido durante publicação do lote | Para maior volume, reservar eventos com expiração e publicar fora da transação longa |
+| Consumidores | SQLite por instância demonstrativa | Armazenamento durável compartilhado por réplicas, com deduplicação |
+| Ordem de eventos | Filas padrão e histórico por evento | Aplicar controle de versão ou FIFO por conta quando o negócio exigir sequência |
+| Cache | Invalidação após commit e retry pela outbox | Definir tolerância a atraso e leituras que exigem dados atuais |
+| Saúde | `/health` responde pelo processo HTTP | Definir readiness e observabilidade das dependências |
+| Observabilidade | Logs Serilog na saída do processo | Alarmes para erros, atraso da outbox, backlog e DLQs |
+| Infraestrutura | Compose local e desenho AWS | Implementar recursos, políticas e pipeline de implantação |
+
+O processamento continua sujeito a reentregas. A deduplicação deve acompanhar qualquer efeito de negócio adicionado aos consumidores. [Garantias do fluxo atual](mensageria.md)

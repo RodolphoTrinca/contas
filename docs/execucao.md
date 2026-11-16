@@ -1,47 +1,92 @@
-# Executar localmente
+# Execução local
 
-Instale Docker com Compose v2. Para desenvolver fora dos contêineres, instale também .NET 10 e Node.js 20.9 ou superior.
+[Início](../README.md) · [Autenticação](autenticacao.md) · [Testes](testes.md)
 
-Execute `bash scripts/run.sh` ou `./scripts/run.ps1` sem argumentos para abrir o menu. O Docker só é acionado após a seleção. Nas duas opções de stack completa e no modo API, o menu também pergunta se deve carregar contas fictícias. Use os argumentos abaixo em automações.
+Para rodar tudo em contêineres, instale Docker com Compose v2. Para depurar ou executar testes no host, use também SDK .NET 10 e Node.js 20.9 ou superior.
 
-| Modo | Bash | PowerShell |
-|---|---|---|
-| Stack completa | `bash scripts/run.sh stack` | `./scripts/run.ps1 -Mode stack` |
-| Stack com demos de Fraude e Cartões | `bash scripts/run.sh demos` | `./scripts/run.ps1 -Mode demos` |
-| Stack com contas fictícias | `bash scripts/run.sh stack --seed` | `./scripts/run.ps1 -Mode stack -Seed` |
-| API, Scalar e dependências | `bash scripts/run.sh api --no-seed` | `./scripts/run.ps1 -Mode api` |
-| API com contas fictícias | `bash scripts/run.sh api --seed` | `./scripts/run.ps1 -Mode api -Seed` |
-| Somente PostgreSQL, Redis e Keycloak | `bash scripts/run.sh infra` | `./scripts/run.ps1 -Mode infra` |
-| Dependências e gateway para depuração | `bash scripts/run.sh debug` | `./scripts/run.ps1 -Mode debug` |
-| Encerrar preservando dados | `bash scripts/run.sh down` | `./scripts/run.ps1 -Mode down` |
+## Escolher os serviços
 
-O gateway local usa [localhost:8080](http://localhost:8080/). O Scalar fica em [/scalar/v1](http://localhost:8080/scalar/v1). O usuário de teste do Keycloak é `operador` com senha `operador-local`. A opção de seed cria dados de conta no PostgreSQL. O Keycloak provisiona o usuário e os clientes de teste em ambos os modos. Rodar sem seed preserva registros previamente criados.
+Execute na raiz `bash scripts/run.sh` ou `./scripts/run.ps1`. O menu coleta a escolha antes de iniciar os serviços. Os modos `stack`, `demos` e `api` também perguntam sobre seed.
 
-O volume do PostgreSQL mantém os bancos da aplicação e do Keycloak. Nos modos `stack`, `demos`, `api` e `debug`, o Compose executa o serviço `migrations` e espera sua saída com código zero antes de iniciar a API ou o gateway de depuração. O modo `infra` apenas inicia as dependências. O seed opcional roda no serviço de migração após a atualização do schema.
+| Modo | O que inicia | Bash | PowerShell |
+|---|---|---|---|
+| `stack` | UI, API, banco, cache, identidade e Nginx | `bash scripts/run.sh stack` | `./scripts/run.ps1 -Mode stack` |
+| `demos` | Stack completa, Floci, demos e painel | `bash scripts/run.sh demos` | `./scripts/run.ps1 -Mode demos` |
+| `api` | API, Scalar e dependências | `bash scripts/run.sh api` | `./scripts/run.ps1 -Mode api` |
+| `infra` | PostgreSQL, Redis e Keycloak | `bash scripts/run.sh infra` | `./scripts/run.ps1 -Mode infra` |
+| `debug` | Dependências, migrações e gateway para o host | `bash scripts/run.sh debug` | `./scripts/run.ps1 -Mode debug` |
+| `down` | Encerra serviços e preserva volumes | `bash scripts/run.sh down` | `./scripts/run.ps1 -Mode down` |
 
-Se você roda a API diretamente com as dependências locais já iniciadas, aplique as migrações antes de iniciar o servidor:
+Os comandos com modo explícito começam sem seed. Para habilitar, acrescente `--seed` no Bash ou `-Seed` no PowerShell. No Bash, `--no-seed` também explicita a escolha.
 
-```sh
+## Endereços
+
+| Serviço | Endereço padrão |
+|---|---|
+| Aplicação | [localhost:8080](http://localhost:8080/) |
+| Scalar / OpenAPI | [Scalar](http://localhost:8080/scalar/v1) · [JSON](http://localhost:8080/openapi/v1.json) |
+| Keycloak administrativo | [Console](http://localhost:8080/auth/admin/) |
+| Demo Fraude / Cartões | `localhost:5091` / `localhost:5092` |
+| Painel de entregas | [localhost:5093](http://localhost:5093/) |
+| PostgreSQL / Redis no host | `127.0.0.1:15432` / `127.0.0.1:16379` |
+| Keycloak direto | `http://localhost:18090/auth` |
+
+`GET /health` retorna 200 quando o servidor HTTP atende. Essa rota verifica o processo HTTP. Para conferir dependências e funcionalidades, use os [testes de integração e E2E](testes.md).
+
+## Dados e migrações
+
+O seed cria **Conta Demonstração**, com CPF fictício `12345678909`, usando o caso de uso de abertura. As carteiras e o titular dessa conta começam sem vínculo. Use os perfis e UUIDs do [guia de autenticação](autenticacao.md) para preparar os cenários de acesso.
+
+Os usuários e clientes Keycloak são importados ao criar o realm, independentemente do seed. O import preserva realms existentes. Executar sem seed mantém os dados já gravados.
+
+Os modos `stack`, `demos`, `api` e `debug` aguardam o serviço `migrations` concluir. Ele aplica migrações EF Core e depois o seed opcional. O modo `infra` apenas inicia as dependências. PostgreSQL, Floci e os históricos SQLite usam volumes persistentes.
+
+Para migrar manualmente com as dependências locais iniciadas, execute na raiz.
+
+```bash
 dotnet run --project src/Contas.Api -- --migrate --environment Development
 ```
 
-Para adicionar uma migração:
+Para criar uma migração durante o desenvolvimento.
 
-```sh
+```bash
 dotnet tool restore
 dotnet ef migrations add NomeDaMigracao --project src/Contas.Infrastructure --startup-project src/Contas.Api --output-dir Persistence/Migrations -- --environment Development
 ```
 
-## Histórico das demos de mensageria
+Revise o código gerado antes de aplicar. O fluxo de release está no [guia AWS](aws.md).
 
-Execute `bash scripts/run.sh demos` ou `./scripts/run.ps1 -Mode demos`. Abra [Histórico de entregas](http://localhost:5093/) em uma aba separada. Crie, edite ou exclua uma conta na [aplicação](http://localhost:8080/) e aguarde a atualização automática do histórico, que ocorre a cada 15 segundos, ou clique em **Atualizar**. Use **Ver mensagem** para conferir o JSON recebido. Alterne entre Fraude e Cartões para conferir o mesmo ID de evento e o resultado de cada processamento simulado.
+## Depurar no VS Code
 
-O Compose provisiona um tópico SNS e duas filas SQS no Floci, com uma fila de mensagens não processadas para cada consumidor. As APIs continuam disponíveis nas portas 5091 (Fraude) e 5092 (Cartões). Cada uma expõe `GET /api/v1/messages`, com paginação pelo parâmetro `before` e seu próprio arquivo SQLite em um volume do Docker. O painel usa os componentes e o tema do Banco KRT no mesmo frontend Next.js, com um proxy dedicado para a página e as consultas de histórico. As informações exibidas incluem ID, versão, tipo, horários, resultado da simulação e o JSON da mensagem.
+1. Inicie `bash scripts/run.sh debug` ou `./scripts/run.ps1 -Mode debug`.
+2. Execute `npm ci` dentro de `src/Contas.Web`.
+3. Abra a raiz no VS Code com a extensão de depuração C# instalada.
+4. Escolha o perfil adequado e inicie com F5.
 
-O histórico mostra os eventos publicados no SNS depois de habilitar esse modo. Eventos já entregues pela simulação anterior no PostgreSQL continuam no histórico daquela simulação. Para verificar o fan-out em uma stack descartável, rode `ACCOUNTS_TEST_FANOUT=true bash scripts/test.sh e2e`. No PowerShell, defina `$env:ACCOUNTS_TEST_FANOUT = "true"` e execute `./scripts/test.ps1 -Mode e2e`.
+| Perfil | Resultado |
+|---|---|
+| **API debug → Scalar** | API no host, com abertura do Scalar pelo gateway |
+| **API debug para UI** | API no host para uso em conjunto com o frontend |
+| **Next.js debug → UI** | Next.js no host, com abertura da aplicação |
+| **Stack debug → UI** | API e Next.js iniciados em conjunto |
 
-## VS Code
+O `debug-gateway` encaminha chamadas aos processos do host nas portas 5080 e 3000. Se o daemon Docker estiver em outra VM ou máquina, defina `CONTAS_DEBUG_HOST` com o endereço alcançável pelo contêiner.
 
-Inicie o modo `debug`, instale as dependências da interface com `npm ci` em `src/Contas.Web` e abra a raiz do projeto no VS Code. Use **API debug → Scalar** para depurar o backend com o Scalar ou **Stack debug → UI** para iniciar API e Next.js e abrir a interface. Os perfis usam as portas locais padrão.
+## Diagnóstico rápido
 
-O gateway de debug usa o endereço da ponte Docker para alcançar os processos iniciados no host. Em ambientes em que o daemon Docker roda em outra máquina ou VM, defina `CONTAS_DEBUG_HOST` com o endereço que o contêiner consegue acessar.
+| Sintoma | Conferir |
+|---|---|
+| Porta ocupada | Variáveis `ACCOUNTS_PORT`, `POSTGRES_PORT`, `REDIS_PORT`, `KEYCLOAK_PORT`, `FRAUD_DEMO_PORT`, `CARDS_DEMO_PORT` e `MESSAGE_HISTORY_PORT` |
+| API falha após mudar schema | Saída do serviço `migrations` |
+| Novo usuário ausente | O realm existente é preservado. Confira usuários e roles no Keycloak. |
+| Painel sem eventos | Modo `demos`, filas, logs dos consumidores e criação de uma nova conta |
+| Gateway de debug retorna 502 | Processos API/Next.js iniciados e endereço `CONTAS_DEBUG_HOST` |
+
+Para consultar a stack de demos.
+
+```bash
+docker compose -f infra/compose.yaml -f infra/compose.fanout.yaml --profile demos ps
+docker compose -f infra/compose.yaml -f infra/compose.fanout.yaml --profile demos logs --tail=80 api fraud-demo cards-demo
+```
+
+O passo a passo para conferir a mesma mensagem nos dois consumidores está em [mensageria](mensageria.md).

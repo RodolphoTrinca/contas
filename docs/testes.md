@@ -1,49 +1,84 @@
 # Testes
 
-| Suíte | Comando Bash | O que cobre |
-|---|---|---|
-| Domínio e arquitetura | `bash scripts/test.sh fast` | Validação de CPF, ciclo de vida da conta, eventos do agregado e direção das referências entre projetos. |
-| Integração .NET | `bash scripts/test.sh integration` | Migração, PostgreSQL e Redis reais, oito tentativas concorrentes, recibo durável, conflito de chave e invalidação. |
-| Navegador | `bash scripts/test.sh e2e` | Interface Next.js, login Keycloak, Nginx, contrato HTTP e fronteiras entre clientes. |
+[Início](../README.md) · [Execução](execucao.md) · [Design](design.md)
 
-O smoke em Python surgiu no primeiro MVP porque a biblioteca padrão permitia verificar HTTP e SQLite sem instalar ferramentas. Esta versão usa xUnit para as verificações de backend e Playwright para a jornada no navegador. Os scripts de teste criam projetos Compose e volumes descartáveis separados do ambiente de desenvolvimento.
+Os testes verificam regras, persistência real e jornadas pelo navegador. Os scripts criam projetos Compose descartáveis para integração e E2E, com portas e volumes próprios.
 
-## Instalar o Playwright
+## Executar
 
-```sh
+Instale SDK .NET 10, Docker com Compose e Node.js 20.9 ou superior. Prepare o Playwright uma vez.
+
+```bash
 cd tests/e2e
 npm ci
 npx playwright install chromium --only-shell
 ```
 
-Se faltarem bibliotecas de sistema no Linux, execute `npx playwright install-deps chromium`. A partir da raiz, rode `bash scripts/test.sh e2e`.
+No Linux, se faltarem bibliotecas de sistema, execute `npx playwright install-deps chromium`. Retorne à raiz para usar os scripts.
 
-No PowerShell, rode `./scripts/test.ps1 -Mode fast`, `-Mode integration`, `-Mode e2e` ou `-Mode all`.
+| Suíte | Bash | PowerShell |
+|---|---|---|
+| Domínio e arquitetura | `bash scripts/test.sh fast` | `./scripts/test.ps1 -Mode fast` |
+| Integração PostgreSQL/Redis | `bash scripts/test.sh integration` | `./scripts/test.ps1 -Mode integration` |
+| Playwright | `bash scripts/test.sh e2e` | `./scripts/test.ps1 -Mode e2e` |
+| Todas as anteriores | `bash scripts/test.sh all` | `./scripts/test.ps1 -Mode all` |
 
-## Cenários no Chromium
+Para incluir Floci e o cenário de fan-out, habilite a variável antes da execução.
 
-- Login OIDC com cookie HttpOnly, logout e acesso anônimo.
-- Abertura de conta, perda da primeira resposta depois de o servidor gravar a conta, reenvio com a mesma chave, edição e exclusão.
-- Credenciais de serviço de Fraude e Cartões, respostas 200 na rota autorizada e 403 no acesso cruzado ou ao CRUD.
-- Contrato de erro para falta de autenticação e CPF inválido.
-- Scalar e OpenAPI servidos pelo Nginx, com a chave de idempotência documentada.
+```bash
+ACCOUNTS_TEST_FANOUT=true bash scripts/test.sh all
+```
 
-Para atualizar a especificação a partir do ambiente padrão, use `curl -fsS http://localhost:8080/openapi/v1.json -o docs/openapi.json`.
+```powershell
+$env:ACCOUNTS_TEST_FANOUT = "true"
+./scripts/test.ps1 -Mode all
+```
 
-O cenário de carteiras usa dois gerentes, um cliente e o Operador autenticados pelo Keycloak. Ele verifica abertura com atribuição automática, consultas e alterações dentro e fora da carteira, transferência exclusiva do Operador, perda de acesso após transferência, reenvio de uma abertura anterior e consulta do titular.
+Sem essa variável, o teste de fan-out é ignorado. `all` respeita a mesma opção.
 
-## Interface v2
+## Cobertura .NET
 
-`design-v2.spec.ts` verifica listagem, busca e filtros da página, abertura, CPF inválido, edição de status, carteira, titular, exclusão, lista vazia, indisponibilidade, sessão expirada e acesso negado nos temas claro e escuro, em 1440, 768, 390 e 320 px. Verifica também que os painéis cabem na tela, não há rolagem horizontal e o foco retorna ao botão de origem após fechar.
+| Suíte | O que verifica |
+|---|---|
+| Domínio | CPF inválido, normalização, abertura, versão, exclusão terminal, alterações sem efeito, carteira, titular e limites dos value objects |
+| Arquitetura | Domain depende do framework, Application depende de Domain e abstrações do Mediator, Infrastructure preserva a direção das referências e o grafo dos projetos segue as camadas |
+| Integração | Migrações, oito aberturas concorrentes com a mesma chave, recibo em novo DbContext, conflito de chave, invalidação Redis, payload da outbox, inbox dos dois consumidores, auditoria e paginação |
 
-Cada etapa anexa uma captura de tela aos resultados. A suíte inclui login inválido, mostrar senha e confirmação de saída no Keycloak real. Para gerar um relatório navegável, use `npm test -- --reporter=html` em `tests/e2e` com `ACCOUNTS_E2E_URL` apontando para uma stack descartável. Consulte [o mapa das referências v2](design.md) para comparar os componentes com o ZIP.
+A integração chama handlers e adaptadores diretamente com PostgreSQL e Redis reais. O contrato HTTP é exercitado pelo Playwright.
 
-## Aparência
+## Cenários Playwright
 
-`theme.spec.ts` cobre três jornadas:
+| Arquivo em `tests/e2e` | Cenários |
+|---|---|
+| `accounts.spec.ts` | CRUD, resposta de criação perdida e reenvio, Scalar/OpenAPI com descrições, parâmetros, cabeçalhos e acesso ao histórico exclusivo do Operador |
+| `login.spec.ts` | OIDC, cookie HttpOnly, logout e acesso anônimo |
+| `authorization.spec.ts` | Fraude e Cartões acessam sua rota e recebem 403 no acesso cruzado ou ao CRUD |
+| `portfolios.spec.ts` | Dois gerentes, atribuição automática, isolamento de carteira, transferência pelo Operador, replay após transferência e consulta do Cliente |
+| `responsive.spec.ts` | Uso no celular e ausência de controles de escrita para o Cliente |
+| `design-v2.spec.ts` | Fluxos e estados visuais em claro/escuro, larguras 1440, 768, 390 e 320 px, foco e ausência de rolagem horizontal |
+| `theme.spec.ts` | Preferência do sistema, persistência, sincronização entre abas, armazenamento indisponível e continuidade pelo Keycloak |
+| `pending-write.unit.spec.ts` | Chave e versão preservadas após recarga, expiração e falhas ambíguas, em testes da lógica frontend |
+| `fanout.spec.ts` | Criação real, mesmo evento nos dois consumidores, deduplicação, JSON, polling de 15 segundos e painel mobile em tema escuro |
 
-- Preferência do sistema, mudanças ao vivo, escolha explícita, recarga e sincronização entre abas. A escolha explícita continua valendo quando o sistema muda, e o teste também verifica erros de execução e de hidratação.
-- Preferência salva inválida e armazenamento bloqueado: a interface continua disponível e permite trocar a aparência na página atual.
-- Tema escolhido na entrada e preservado no login, no erro de senha, na área autenticada e na saída do Keycloak, em 320 px. A troca feita no Keycloak também é respeitada ao retornar à aplicação.
+Os testes de negócio usam a stack real. O teste visual intercepta alguns dados no navegador para reproduzir estados determinísticos. As capturas servem para revisão visual. As asserções cobrem layout e comportamento, com comparação pixel a pixel fora da cobertura atual.
 
-A suíte tem 19 cenários de navegador: oito combinações de tema e largura para a interface v2, três de aparência e oito dos demais fluxos. As capturas registram o resultado para revisão visual; não há comparação automática pixel a pixel com uma imagem de referência.
+Para listar os casos disponíveis, execute `npx playwright test --list` dentro de `tests/e2e`. Isso evita depender de uma contagem fixa na documentação.
+
+## Relatórios e contrato
+
+Para gerar um relatório HTML, rode contra uma stack descartável já iniciada, a partir de `tests/e2e`. Ajuste a URL à porta dessa stack.
+
+```bash
+ACCOUNTS_E2E_URL=http://localhost:18080 npm test -- --reporter=html
+npx playwright show-report
+```
+
+Para incluir o cenário de mensageria nessa execução manual, configure também `ACCOUNTS_HISTORY_URL` e `ACCOUNTS_FANOUT_PROJECT` para o painel e o nome do projeto Compose. O script `scripts/test.sh e2e` já define essas variáveis no modo fan-out.
+
+A especificação versionada pode ser atualizada a partir da API local. Revise o diff antes de commitá-la.
+
+```bash
+curl -fsS http://localhost:8080/openapi/v1.json -o docs/openapi.json
+```
+
+Resultados e capturas ficam em diretórios ignorados pelo Git. Os testes de backend são .NET/xUnit. O Python existente provisiona o Floci. [Fluxo de mensageria](mensageria.md)

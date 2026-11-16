@@ -1,24 +1,46 @@
-# Contas
+# Banco KRT · Gestão de contas
 
-Gestão de contas com .NET 10, Next.js, PostgreSQL, Redis, Keycloak e Nginx.
+Aplicação demonstrativa com contas de clientes, carteiras de gerentes, auditoria e integração com Fraude e Cartões. Backend em .NET 10 e interface Next.js responsiva, com temas claro e escuro.
 
-## Começar
+## Rodar localmente
 
-```sh
+Com Docker e Compose v2 instalados, execute na raiz do projeto.
+
+```bash
 bash scripts/run.sh
 ```
 
-No PowerShell, use `./scripts/run.ps1`. Escolha o ambiente no menu e, para a stack completa, a stack com demos ou a API, informe se deseja carregar contas fictícias. Abra [localhost:8080](http://localhost:8080/) e entre com `operador` / `operador-local`. A documentação interativa está no [Scalar](http://localhost:8080/scalar/v1).
+No PowerShell, execute `./scripts/run.ps1`. O menu pergunta quais serviços iniciar e se deseja carregar a conta fictícia. Escolha **Stack completa com demos** para experimentar também o fan-out de eventos.
+
+| Acesso | Endereço |
+|---|---|
+| Aplicação | [localhost:8080](http://localhost:8080/) |
+| Documentação interativa da API | [Scalar](http://localhost:8080/scalar/v1) |
+| Mensagens de Fraude e Cartões, no modo `demos` | [localhost:5093](http://localhost:5093/) |
+
+Entre com `operador` / `operador-local`. As credenciais versionadas são de demonstração local. Os demais perfis estão no [guia de autenticação](docs/autenticacao.md).
+
+## O que experimentar
+
+- Abrir, consultar, editar, ativar, inativar e excluir contas.
+- Comparar o acesso de Operador, Gerente e Cliente.
+- Transferir contas entre carteiras e vincular a identidade do titular.
+- Consultar quem alterou cada conta e quando.
+- Acompanhar o mesmo evento em Fraude e Cartões, com processamento e JSON da mensagem.
 
 ## Documentação
 
-- [Execução, seed e depuração no VS Code](docs/execucao.md)
-- [Arquitetura e padrões do projeto](docs/arquitetura.md)
-- [Design responsivo e tema do Keycloak](docs/design.md)
-- [Especificação funcional](docs/spec.md)
-- [Contrato OpenAPI](docs/openapi.json)
-- [Login e integração com Keycloak](docs/autenticacao.md)
-- [Testes .NET e Playwright](docs/testes.md)
-- [Proposta para AWS](docs/aws.md)
+| Quero entender… | Guia |
+|---|---|
+| Funcionalidades, regras e contrato HTTP | [Especificação](docs/spec.md) |
+| Como executar, usar seed e depurar | [Execução local](docs/execucao.md) |
+| Camadas, domínio, CQRS e consistência | [Arquitetura](docs/arquitetura.md) |
+| Serviços, bibliotecas e motivos das escolhas | [Dependências](docs/dependencias.md) |
+| Usuários, permissões e chamadas externas | [Autenticação](docs/autenticacao.md) |
+| Outbox, SNS/SQS e painel de entregas | [Mensageria](docs/mensageria.md) |
+| Telas, componentes e temas | [Design](docs/design.md) |
+| Como testar e quais cenários são cobertos | [Testes](docs/testes.md) |
+| Como evoluir para produção | [Proposta AWS](docs/aws.md) |
+| Schemas e operações da API | [OpenAPI 3.1.1](docs/openapi.json) |
 
-O código está em `src/`, o ambiente local em `infra/`, os comandos em `scripts/`, os exemplos em `samples/` e as suítes em `tests/`. As instruções para agentes ficam em [AGENTS.md](AGENTS.md).
+`src/` contém a aplicação, `samples/` as APIs demonstrativas, `infra/` os contêineres, `scripts/` os comandos e `tests/` as suítes. As orientações para agentes estão em [AGENTS.md](AGENTS.md).
