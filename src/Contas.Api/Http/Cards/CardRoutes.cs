@@ -1,5 +1,5 @@
 using Contas.Api.Security;
-using Contas.Application.Accounts.Queries;
+using Contas.Application.Cards.Queries;
 using Contas.Domain;
 using Mediator;
 using static Contas.Api.Http.RouteResponses;
@@ -15,6 +15,6 @@ internal static class CardRoutes
     }
 
     private static async Task<IResult> GetCardEligibility(Guid id, ISender sender, HttpContext http, CancellationToken ct)
-        => Responses.From(http, await sender.Send(new GetAccountQuery(new AccountId(id)), ct),
-            account => new CardEligibility(account.Id, account.Status == AccountStatus.Active));
+        => Responses.From(http, await sender.Send(new GetCardEligibilityQuery(new AccountId(id)), ct),
+            eligibility => eligibility);
 }
