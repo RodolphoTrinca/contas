@@ -18,7 +18,9 @@ flowchart LR
 4. Usar o adaptador Redis já implementado com ElastiCache. Invalidar após o commit e repetir invalidações por evento. Usar versão monotônica ou marcador de versão no cache para impedir que leituras concorrentes repovoem uma versão antiga. Definir a tolerância a atraso e consultar a origem para operações que exigem leitura atual.
 5. Integrar identidade e autorização por operação, armazenar segredos no Secrets Manager, restringir permissões com IAM e limitar o Scalar ao ambiente apropriado. Acompanhar latência, acertos de cache, atraso de publicação e mensagens nas filas de falhas no CloudWatch.
 
-O perfil local já usa PostgreSQL, Redis e Keycloak. Na AWS, configure a identidade de produção e substitua a entrega local por SNS e SQS.
+O modo `demos` exercita SNS e SQS via Floci com o SDK da AWS. O publicador usa `Messaging__TopicArn` e `Messaging__Region` para apontar a um tópico real. Em produção, deixe `Messaging__Endpoint` ausente para usar o endpoint regional e as credenciais da tarefa ECS. Crie as filas e assinaturas SQS com entrega bruta, políticas que aceitem publicações do tópico e uma fila de mensagens não processadas por consumidor. Restrinja a tarefa publicadora a `sns:Publish` no tópico e cada consumidor à sua fila.
+
+A publicação é pelo menos uma vez. O worker só registra o sucesso após a confirmação do SNS, então uma falha entre essa confirmação e o commit pode gerar nova entrega. As demos deduplicam pelo ID de evento e só removem a mensagem do SQS após persistir o processamento em SQLite. Em produção, use um armazenamento durável compartilhado pela frota de cada consumidor. O publicador atual mantém o lock do lote durante as publicações. Para alto volume, separe a reserva dos eventos da chamada de rede usando uma reserva com expiração.
 
 ## Migrações no release
 

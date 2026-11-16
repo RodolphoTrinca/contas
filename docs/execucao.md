@@ -32,6 +32,14 @@ dotnet tool restore
 dotnet ef migrations add NomeDaMigracao --project src/Contas.Infrastructure --startup-project src/Contas.Api --output-dir Persistence/Migrations -- --environment Development
 ```
 
+## Histórico das demos de mensageria
+
+Execute `bash scripts/run.sh demos` ou `./scripts/run.ps1 -Mode demos`. Abra [Histórico de entregas](http://localhost:5093/) em uma aba separada. Crie, edite ou exclua uma conta na [aplicação](http://localhost:8080/) e aguarde a atualização automática do histórico, que ocorre a cada 15 segundos, ou clique em **Atualizar**. Use **Ver mensagem** para conferir o JSON recebido. Alterne entre Fraude e Cartões para conferir o mesmo ID de evento e o resultado de cada processamento simulado.
+
+O Compose provisiona um tópico SNS e duas filas SQS no Floci, com uma fila de mensagens não processadas para cada consumidor. As APIs continuam disponíveis nas portas 5091 (Fraude) e 5092 (Cartões). Cada uma expõe `GET /api/v1/messages`, com paginação pelo parâmetro `before` e seu próprio arquivo SQLite em um volume do Docker. O painel usa os componentes e o tema do Banco KRT no mesmo frontend Next.js, com um proxy dedicado para a página e as consultas de histórico. As informações exibidas incluem ID, versão, tipo, horários, resultado da simulação e o JSON da mensagem.
+
+O histórico mostra os eventos publicados no SNS depois de habilitar esse modo. Eventos já entregues pela simulação anterior no PostgreSQL continuam no histórico daquela simulação. Para verificar o fan-out em uma stack descartável, rode `ACCOUNTS_TEST_FANOUT=true bash scripts/test.sh e2e`. No PowerShell, defina `$env:ACCOUNTS_TEST_FANOUT = "true"` e execute `./scripts/test.ps1 -Mode e2e`.
+
 ## VS Code
 
 Inicie o modo `debug`, instale as dependências da interface com `npm ci` em `src/Contas.Web` e abra a raiz do projeto no VS Code. Use **API debug → Scalar** para depurar o backend com o Scalar ou **Stack debug → UI** para iniciar API e Next.js e abrir a interface. Os perfis usam as portas locais padrão.
