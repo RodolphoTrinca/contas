@@ -40,19 +40,21 @@ public sealed class PostgresRedisTests
         Assert.All(results, result => Assert.True(result.IsSuccess, result.Error?.Code));
         Assert.Single(results, result => result.Value is { Replayed: false });
         var account = Assert.Single(results.Select(result => result.Value!.Account).Distinct());
+        var accountId = new AccountId(account.Id);
+        var initialVersion = AccountVersion.Create(account.Version).Value!;
         await using var readDb = new AccountsDb(options);
-        Assert.Equal(account, (await Store(readDb).Get(account.Id, ct)).Value);
+        Assert.Equal(account, (await Store(readDb).Get(accountId, ct)).Value);
         Assert.Equal(account, (await cache.Read(account.Id)).Account);
 
         await using (var writeDb = new AccountsDb(options))
         {
             var changed = await new ReviseAccountHandler(Store(writeDb), TimeProvider.System)
-                .Handle(new ReviseAccountCommand(scope, Guid.NewGuid(), account.Id, account.Version, "Conta Atualizada",
+                .Handle(new ReviseAccountCommand(scope, Guid.NewGuid(), accountId, initialVersion, "Conta Atualizada",
                     AccountStatus.Inactive), ct);
             Assert.True(changed.IsSuccess);
         }
         Assert.Null((await cache.Read(account.Id)).Account);
-        Assert.Equal(AccountStatus.Inactive, (await Store(readDb).Get(account.Id, ct)).Value!.Status);
+        Assert.Equal(AccountStatus.Inactive, (await Store(readDb).Get(accountId, ct)).Value!.Status);
 
         await using (var reopenedDb = new AccountsDb(options))
         {
@@ -68,6 +70,13 @@ public sealed class PostgresRedisTests
         await sql.OpenAsync(ct);
         await using var events = new NpgsqlCommand("""SELECT count(*) FROM "Outbox" WHERE "Payload"::jsonb ->> 'Type' = 'AccountCreated'""", sql);
         Assert.Equal(1L, await events.ExecuteScalarAsync(ct));
+        await using var eventPayload = new NpgsqlCommand("""
+            SELECT "Payload" FROM "Outbox" WHERE "Payload"::jsonb ->> 'Type' = 'AccountCreated'
+            """, sql);
+        var serialized = Assert.IsType<string>(await eventPayload.ExecuteScalarAsync(ct));
+        using var payload = System.Text.Json.JsonDocument.Parse(serialized);
+        Assert.Equal(account.Id, payload.RootElement.GetProperty("AccountId").GetGuid());
+        Assert.Equal(account.Version, payload.RootElement.GetProperty("Version").GetInt64());
         var services = new ServiceCollection();
         services.AddDbContext<AccountsDb>(builder => builder.UseNpgsql(connection));
         await using var provider = services.BuildServiceProvider();
@@ -90,15 +99,16 @@ public sealed class PostgresRedisTests
         await using (var assignmentDb = new AccountsDb(options))
         {
             var assignment = new AccountAssignment(assignmentDb, TimeProvider.System, NullLogger<AccountAssignment>.Instance);
-            var manager = Guid.NewGuid();
-            Assert.True((await assignment.Transfer(account.Id, manager, operatorActor, ct)).IsSuccess);
-            Assert.True((await assignment.Transfer(account.Id, manager, operatorActor, ct)).IsSuccess);
-            Assert.True((await assignment.LinkOwner(account.Id, Guid.NewGuid(), operatorActor, ct)).IsSuccess);
+            var manager = AccountSubject.Create(Guid.NewGuid()).Value!;
+            Assert.True((await assignment.Transfer(accountId, manager, operatorActor, ct)).IsSuccess);
+            Assert.True((await assignment.Transfer(accountId, manager, operatorActor, ct)).IsSuccess);
+            Assert.True((await assignment.LinkOwner(accountId, AccountSubject.Create(Guid.NewGuid()).Value!, operatorActor, ct)).IsSuccess);
         }
         await using (var deleteDb = new AccountsDb(options))
         {
             var deleted = await new DeleteAccountHandler(Store(deleteDb), TimeProvider.System)
-                .Handle(new DeleteAccountCommand(operatorActor, Guid.NewGuid(), account.Id, account.Version + 1), ct);
+                .Handle(new DeleteAccountCommand(operatorActor, Guid.NewGuid(), accountId,
+                    AccountVersion.Create(account.Version + 1).Value!), ct);
             Assert.True(deleted.IsSuccess);
         }
 

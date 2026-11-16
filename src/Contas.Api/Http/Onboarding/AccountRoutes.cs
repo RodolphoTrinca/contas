@@ -4,6 +4,7 @@ using Contas.Api.Security;
 using Contas.Application;
 using Contas.Application.Accounts.Commands;
 using Contas.Application.Accounts.Queries;
+using Contas.Domain;
 using Mediator;
 using Microsoft.AspNetCore.Mvc;
 using static Contas.Api.Http.RouteResponses;
@@ -92,7 +93,7 @@ internal static class AccountRoutes
             accounts => accounts);
 
     private static async Task<IResult> GetAccount(Guid id, ISender sender, HttpContext http, CancellationToken ct)
-        => Responses.From(http, await sender.Send(new GetAccountQuery(id, AccountIdentity.Access(http.User)), ct),
+        => Responses.From(http, await sender.Send(new GetAccountQuery(new AccountId(id), AccountIdentity.Access(http.User)), ct),
             account => account);
 
     private static async Task<IResult> OpenAccount([FromHeader(Name = IdempotencyHeaders.Key)] Guid key,
@@ -110,9 +111,10 @@ internal static class AccountRoutes
         ReviseRequest body, ISender sender, HttpContext http, CancellationToken ct)
     {
         if (key == Guid.Empty) return InvalidKey(http);
-        if (expectedVersion < 1) return InvalidVersion(http);
+        var version = AccountVersion.Create(expectedVersion);
+        if (!version.IsSuccess) return InvalidVersion(http, version.Error);
 
-        var command = new ReviseAccountCommand(AccountIdentity.Scope(http.User), key, id, expectedVersion, body.HolderName, body.Status,
+        var command = new ReviseAccountCommand(AccountIdentity.Scope(http.User), key, new AccountId(id), version.Value, body.HolderName, body.Status,
             AccountIdentity.Access(http.User));
         return Responses.Write(http, await sender.Send(command, ct), account => account);
     }
@@ -122,9 +124,10 @@ internal static class AccountRoutes
         ISender sender, HttpContext http, CancellationToken ct)
     {
         if (key == Guid.Empty) return InvalidKey(http);
-        if (expectedVersion < 1) return InvalidVersion(http);
+        var version = AccountVersion.Create(expectedVersion);
+        if (!version.IsSuccess) return InvalidVersion(http, version.Error);
 
-        var command = new DeleteAccountCommand(AccountIdentity.Scope(http.User), key, id, expectedVersion,
+        var command = new DeleteAccountCommand(AccountIdentity.Scope(http.User), key, new AccountId(id), version.Value,
             AccountIdentity.Access(http.User));
         return Responses.Write(http, await sender.Send(command, ct), account => new DeletedAccount(account.Id, true));
     }
@@ -132,14 +135,14 @@ internal static class AccountRoutes
     private static async Task<IResult> TransferPortfolio(Guid id, AssignmentRequest body, ISender sender,
         HttpContext http, CancellationToken ct)
     {
-        var command = new TransferPortfolioCommand(id, body.Subject, AccountIdentity.Scope(http.User));
+        var command = new TransferPortfolioCommand(new AccountId(id), body.Subject, AccountIdentity.Scope(http.User));
         return Responses.From(http, await sender.Send(command, ct), assigned => assigned);
     }
 
     private static async Task<IResult> LinkOwner(Guid id, AssignmentRequest body, ISender sender,
         HttpContext http, CancellationToken ct)
     {
-        var command = new LinkAccountOwnerCommand(id, body.Subject, AccountIdentity.Scope(http.User));
+        var command = new LinkAccountOwnerCommand(new AccountId(id), body.Subject, AccountIdentity.Scope(http.User));
         return Responses.From(http, await sender.Send(command, ct), linked => linked);
     }
 
@@ -159,8 +162,8 @@ internal static class AccountRoutes
         return Responses.Ok(http, new AccountPermissions(access is null or { IsManager: true }, access is null));
     }
 
-    private static IResult InvalidVersion(HttpContext http)
-        => Responses.Fail(http, StatusCodes.Status400BadRequest, "account.invalid_version",
+    private static IResult InvalidVersion(HttpContext http, Error error)
+        => Responses.Fail(http, StatusCodes.Status400BadRequest, error.Code,
             "Informe a versão da conta no cabeçalho Expected-Version.");
 
     private static IResult InvalidKey(HttpContext http)

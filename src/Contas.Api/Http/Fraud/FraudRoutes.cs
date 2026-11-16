@@ -1,5 +1,6 @@
 using Contas.Api.Security;
 using Contas.Application.Accounts.Queries;
+using Contas.Domain;
 using Mediator;
 using static Contas.Api.Http.RouteResponses;
 
@@ -14,6 +15,6 @@ internal static class FraudRoutes
     }
 
     private static async Task<IResult> GetAccountStatus(Guid id, ISender sender, HttpContext http, CancellationToken ct)
-        => Responses.From(http, await sender.Send(new GetAccountQuery(id), ct),
+        => Responses.From(http, await sender.Send(new GetAccountQuery(new AccountId(id)), ct),
             account => new FraudStatus(account.Id, account.Status));
 }

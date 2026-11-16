@@ -15,12 +15,14 @@ flowchart LR
     Api --> Keycloak
 ```
 
-- **Domain** contém o agregado, o valor CPF, eventos e Result. As regras esperadas usam resultados com códigos estáveis.
+- **Domain** contém o agregado `Account`, os valores `Cpf`, `AccountHolderName`, `AccountSubject`, `AccountId` e `AccountVersion`, os eventos e `Result`. A conta decide se uma abertura, edição, exclusão, transferência de carteira ou vínculo de titular pode ocorrer e se a operação mudou seu estado.
 - **Application** executa abertura, alteração e exclusão e depende de portas de persistência. As operações HTTP permanecem em Api.
 - **Infrastructure** implementa portas com EF Core, PostgreSQL, Redis e outbox. A mesma transação confirma a conta, o recibo idempotente e o evento.
 - **Api** autentica, autoriza e adapta os resultados ao contrato HTTP. Serilog registra requisições e falhas de infraestrutura.
 - **Web** autentica por OIDC com PKCE, guarda o access token em cookie HttpOnly e encaminha requisições por uma rota de servidor.
 - **Infra** usa Compose para PostgreSQL, Redis, Keycloak e Nginx.
+
+Os modelos de persistência e os contratos HTTP representam dados nas fronteiras. A infraestrutura reconstitui o agregado para alterações, aplica o estado resultante e grava a auditoria. As consultas podem projetar seus modelos de leitura diretamente. O PostgreSQL mantém as restrições que dependem de mais de uma conta, como a unicidade de CPF e de titular vinculado.
 
 A chave idempotente é escopada ao cliente e ao sujeito do token. O PostgreSQL serializa tentativas para o mesmo escopo e chave com um lock transacional. O recibo expira em 24 horas. Redis guarda consultas individuais até a próxima meia-noite em São Paulo e usa uma geração por conta para evitar que uma leitura concorrente recoloque uma versão antiga após a invalidação. A outbox repete a invalidação após falhas e distribui os eventos para caixas de entrada locais.
 

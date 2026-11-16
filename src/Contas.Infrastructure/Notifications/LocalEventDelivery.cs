@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Contas.Domain;
 using Contas.Infrastructure.Cache;
 using Contas.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +35,7 @@ public sealed class LocalEventDelivery(IServiceScopeFactory scopes, AccountCache
         var batch = await db.Outbox.Where(row => !row.Published).OrderBy(row => row.Sequence).Take(100).ToListAsync(ct);
         foreach (var row in batch)
         {
-            var change = JsonSerializer.Deserialize<AccountEvent>(row.Payload);
+            var change = JsonSerializer.Deserialize<AccountEventMessage>(row.Payload);
             if (change is null) break;
             if (!await cache.Invalidate(change.AccountId)) continue;
             db.Inbox.Add(new("fraud", row.EventId, row.Payload));

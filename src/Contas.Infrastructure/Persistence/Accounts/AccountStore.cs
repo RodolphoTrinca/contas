@@ -13,9 +13,10 @@ namespace Contas.Infrastructure.Persistence;
 public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider clock,
     ILogger<AccountStore> logger) : IAccountStore
 {
-    public async Task<Result<WriteReceipt>> Write(string scope, Guid key, string fingerprint,
+    public async Task<Result<WriteReceipt>> Write(IdempotentWrite operation,
         Func<IAccounts, Task<Result<Account>>> execute, CancellationToken ct, AccountAccess? access = null)
     {
+        var (scope, key, fingerprint) = operation;
         try
         {
             await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -25,7 +26,7 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
             var existing = await db.Receipts.FindAsync([scope, key], ct);
             if (existing is not null && existing.ExpiresAt > now)
             {
-                if (existing.Fingerprint != fingerprint)
+                if (!operation.Matches(existing.Fingerprint))
                     return Result<WriteReceipt>.Failure(new("idempotency.key_conflict", "A chave já foi usada em outra requisição.", ErrorKind.Conflict));
                 var previous = JsonSerializer.Deserialize<AccountView>(existing.Response);
                 if (previous is not null && access is not null &&
@@ -44,8 +45,9 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
             if (account.PendingEvent is { } change)
             {
                 session.Persist(account);
-                db.AuditEntries.Add(new(account.Id, scope, change.Type, change.OccurredAt));
-                db.Outbox.Add(new OutboxRecord { EventId = change.EventId, Payload = JsonSerializer.Serialize(change) });
+                var message = AccountEventMessage.From(change);
+                db.AuditEntries.Add(new(message.AccountId, scope, message.Type, message.OccurredAt));
+                db.Outbox.Add(new OutboxRecord { EventId = message.EventId, Payload = JsonSerializer.Serialize(message) });
             }
 
             var view = AccountView.From(account);
@@ -56,7 +58,7 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
             db.Receipts.Add(new(scope, key, fingerprint, JsonSerializer.Serialize(view), now.AddDays(1)));
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
-            if (account.PendingEvent is not null) await cache.Invalidate(account.Id);
+            if (account.PendingEvent is not null) await cache.Invalidate(account.Id.Value);
             return Result<WriteReceipt>.Success(new(view, false));
         }
         catch (DbUpdateConcurrencyException)
@@ -75,8 +77,9 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
         }
     }
 
-    public async Task<Result<AccountView>> Get(Guid id, CancellationToken ct, AccountAccess? access = null)
+    public async Task<Result<AccountView>> Get(AccountId accountId, CancellationToken ct, AccountAccess? access = null)
     {
+        var id = accountId.Value;
         var lookup = access is null ? await cache.Read(id) : new CacheLookup(null, null);
         if (lookup.Account is not null) return Result<AccountView>.Success(lookup.Account);
         try
@@ -109,12 +112,14 @@ public sealed class AccountStore(AccountsDb db, AccountCache cache, TimeProvider
     }
 
     internal static IQueryable<StoredAccount> Visible(IQueryable<StoredAccount> rows, AccountAccess? access)
-        => access switch
-        {
-            null => rows,
-            { IsManager: true } => rows.Where(row => row.ManagerSubject == access.Subject),
-            _ => rows.Where(row => row.OwnerSubject == access.Subject)
-        };
+    {
+        if (access is null) return rows;
+        if (access.Subject is not { } subject) return rows.Where(_ => false);
+        var value = subject.Value.ToString();
+        return access.IsManager
+            ? rows.Where(row => row.ManagerSubject == value)
+            : rows.Where(row => row.OwnerSubject == value);
+    }
 
     private static IQueryable<AccountView> Project(IQueryable<StoredAccount> rows)
         => rows.Select(row => new AccountView(row.Id, row.HolderName,

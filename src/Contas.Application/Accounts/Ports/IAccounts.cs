@@ -4,7 +4,7 @@ namespace Contas.Application;
 
 public interface IAccounts
 {
-    Task<Account?> Find(Guid id, CancellationToken cancellationToken);
-    Task<bool> CpfExists(string cpf, CancellationToken cancellationToken);
+    Task<Account?> Find(AccountId id, CancellationToken cancellationToken);
+    Task<bool> CpfExists(Cpf cpf, CancellationToken cancellationToken);
     void Add(Account account);
 }

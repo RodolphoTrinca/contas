@@ -15,6 +15,6 @@ internal static class CardRoutes
     }
 
     private static async Task<IResult> GetCardEligibility(Guid id, ISender sender, HttpContext http, CancellationToken ct)
-        => Responses.From(http, await sender.Send(new GetAccountQuery(id), ct),
+        => Responses.From(http, await sender.Send(new GetAccountQuery(new AccountId(id)), ct),
             account => new CardEligibility(account.Id, account.Status == AccountStatus.Active));
 }
