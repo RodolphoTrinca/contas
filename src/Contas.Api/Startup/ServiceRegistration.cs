@@ -73,6 +73,8 @@ internal static class ServiceRegistration
             options.ServiceLifetime = ServiceLifetime.Scoped;
         });
         services.AddScoped<DemoSeed>();
+        services.AddOptions<SnsOptions>().BindConfiguration(SnsOptions.SectionName);
+        services.AddSingleton<SnsEventPublisher>();
         services.AddHostedService<LocalEventDelivery>();
     }
 }

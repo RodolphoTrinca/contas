@@ -1,15 +1,18 @@
+using System.Net.Http;
 using System.Text.Json;
+using Amazon.Runtime;
 using Contas.Infrastructure.Cache;
 using Contas.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace Contas.Infrastructure.Notifications;
 
-public sealed class LocalEventDelivery(IServiceScopeFactory scopes, AccountCache cache, ILogger<LocalEventDelivery> logger) : BackgroundService
+public sealed class LocalEventDelivery(IServiceScopeFactory scopes, AccountCache cache, ILogger<LocalEventDelivery> logger, IOptions<SnsOptions>? messaging = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -33,13 +36,34 @@ public sealed class LocalEventDelivery(IServiceScopeFactory scopes, AccountCache
         await db.Receipts.Where(row => row.ExpiresAt <= DateTimeOffset.UtcNow)
             .ExecuteDeleteAsync(ct);
         var batch = await db.Outbox.Where(row => !row.Published).OrderBy(row => row.Sequence).Take(100).ToListAsync(ct);
+        var publisher = string.IsNullOrWhiteSpace(messaging?.Value.TopicArn)
+            ? null : scope.ServiceProvider.GetRequiredService<SnsEventPublisher>();
+        var invalidated = new HashSet<Guid>();
         foreach (var row in batch)
         {
             var change = JsonSerializer.Deserialize<AccountEventMessage>(row.Payload);
             if (change is null) break;
-            if (!await cache.Invalidate(change.AccountId)) continue;
-            db.Inbox.Add(new("fraud", row.EventId, row.Payload));
-            db.Inbox.Add(new("cards", row.EventId, row.Payload));
+            if (!invalidated.Contains(change.AccountId))
+            {
+                if (!await cache.Invalidate(change.AccountId)) continue;
+                invalidated.Add(change.AccountId);
+            }
+
+            if (publisher is not null)
+            {
+                try { await publisher.Publish(row.Payload, ct); }
+                catch (Exception error) when (!ct.IsCancellationRequested &&
+                    error is AmazonClientException or AmazonServiceException or HttpRequestException or OperationCanceledException)
+                {
+                    logger.LogWarning("Publicação SNS pendente: {ErrorType}", error.GetType().Name);
+                    break;
+                }
+            }
+            else
+            {
+                db.Inbox.Add(new("fraud", row.EventId, row.Payload));
+                db.Inbox.Add(new("cards", row.EventId, row.Payload));
+            }
             row.Published = true;
         }
         await db.SaveChangesAsync(ct);
