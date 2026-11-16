@@ -83,6 +83,20 @@ test("publica Scalar e o contrato OpenAPI pelo Nginx", async ({ page, request })
       expect.arrayContaining([expect.objectContaining({ name: "Expected-Version", in: "header", required: true })]),
     );
   }
+  expect(contract.info.title).toBe("Banco KRT · API de Contas");
+  expect(contract.info.description).toContain("24 horas");
+  for (const path of Object.values(contract.paths) as Record<string, any>[]) {
+    for (const operation of Object.values(path)) {
+      expect(operation.summary).toBeTruthy();
+      expect(operation.description).toBeTruthy();
+      for (const parameter of operation.parameters ?? []) expect(parameter.description).toBeTruthy();
+    }
+  }
+  expect(contract.paths["/api/v1/accounts"].post.responses["201"].headers).toHaveProperty("Location");
+  expect(contract.paths["/api/v1/accounts"].post.responses["201"].headers).toHaveProperty("Idempotency-Replayed");
+  expect(contract.paths["/api/v1/fraud/accounts/{id}/status"].get.description).toContain("fraud-reader");
+  expect(contract.paths["/api/v1/cards/accounts/{id}/eligibility"].get.description).toContain("cards-reader");
+  expect(contract.components.schemas.OpenRequest.properties.cpf.description).toContain("11 dígitos");
   const scalar = await page.goto("/scalar/v1");
   expect(scalar?.ok()).toBeTruthy();
   await expect(page).toHaveTitle(/scalar|api reference/i);

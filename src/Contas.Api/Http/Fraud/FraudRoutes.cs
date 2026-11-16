@@ -11,6 +11,9 @@ internal static class FraudRoutes
     internal static void MapFraudRoutes(this RouteGroupBuilder v1)
     {
         Describe<FraudStatus>(v1.MapGet("/fraud/accounts/{id:guid}/status", GetAccountStatus)
+            .WithName(nameof(GetAccountStatus))
+            .WithSummary("Consultar status para Fraude")
+            .WithDescription("Exige cliente fraud-api e role fraud-reader, com token client credentials. Retorna id e status active ou inactive. Conta ausente ou excluída retorna 404. Consultas podem usar Redis. Tokens de Cartões ou do cliente web recebem 403 nesta rota.")
             .RequireAuthorization(AuthorizationPolicies.Fraud).WithTags("Fraude"));
     }
 

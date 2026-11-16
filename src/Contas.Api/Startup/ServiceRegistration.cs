@@ -10,7 +10,7 @@ using Contas.Infrastructure.Persistence;
 using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Microsoft.OpenApi;
+using Contas.Api.Http;
 using Serilog;
 using StackExchange.Redis;
 
@@ -29,20 +29,8 @@ internal static class ServiceRegistration
     {
         services.AddOpenApi(options =>
         {
-            options.AddDocumentTransformer((document, _, _) =>
-            {
-                document.Components ??= new();
-                document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
-                document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
-                {
-                    Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT"
-                };
-                document.Security = [new OpenApiSecurityRequirement
-                {
-                    [new OpenApiSecuritySchemeReference("Bearer", document)] = []
-                }];
-                return Task.CompletedTask;
-            });
+            options.AddDocumentTransformer(ApiDocumentation.DescribeDocument);
+            options.AddOperationTransformer(ApiDocumentation.DescribeOperation);
         });
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(
             new JsonStringEnumConverter<AccountStatus>(JsonNamingPolicy.CamelCase, false)));

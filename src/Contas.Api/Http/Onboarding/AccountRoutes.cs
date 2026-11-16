@@ -49,41 +49,144 @@ internal static class AccountRoutes
 
     private static void MapListAccounts(RouteGroupBuilder accounts)
         => Describe<IReadOnlyList<AccountView>>(accounts.MapGet("/", ListAccounts)
+            .WithName(nameof(ListAccounts))
+            .WithSummary("Listar contas visíveis")
+            .WithDescription("""
+                Operador lista todas as contas, Gerente lista a própria carteira e Cliente lista a conta vinculada à sua identidade.
+                A lista omite contas excluídas e mascara o CPF. A ordenação é por nome e UUID.
+                Use limit entre 1 e 100 e offset a partir de zero. Os padrões são 25 e 0.
+                A resposta contém um array em data. Busca e filtros da interface atuam sobre a página carregada.
+                """)
             .RequireAuthorization(AuthorizationPolicies.AccountRead));
 
     private static void MapGetAccount(RouteGroupBuilder accounts)
         => Describe<AccountView>(accounts.MapGet("/{id:guid}", GetAccount)
+            .WithName(nameof(GetAccount))
+            .WithSummary("Consultar uma conta")
+            .WithDescription("""
+                Retorna UUID, nome, CPF mascarado, status e versão da conta.
+                Operador consulta qualquer conta, Gerente consulta a própria carteira e Cliente consulta a conta vinculada.
+                Conta ausente, excluída ou fora do escopo retorna 404 com account.not_found.
+                Consultas do Operador podem usar Redis. Consultas de Gerente e Cliente verificam os vínculos no PostgreSQL.
+                """)
             .RequireAuthorization(AuthorizationPolicies.AccountRead));
 
     private static void MapOpenAccount(RouteGroupBuilder accounts)
         => Describe<AccountView>(accounts.MapPost("/", OpenAccount)
+            .WithName(nameof(OpenAccount))
+            .WithSummary("Abrir uma conta")
+            .WithDescription("""
+                Exige o cliente contas-web com role accounts-operator ou accounts-manager.
+                O nome deve ter de 2 a 120 caracteres. O CPF aceita 11 dígitos ou o formato pontuado e deve ter dígitos verificadores válidos.
+                A conta começa active, com versão 1. Abertura pelo Gerente atribui automaticamente a conta à sua carteira.
+
+                Envie Idempotency-Key com um UUID novo para esta operação. Em retry, preserve chave e conteúdo.
+                O recibo dura 24 horas por identidade e chave. Reuso com conteúdo diferente retorna 409 com idempotency.key_conflict.
+                CPF já usado por uma conta não excluída retorna 409 com account.duplicate_cpf.
+                O sucesso retorna 201, Location e a conta em data. Auditoria e evento são gravados na mesma transação.
+
+                Exemplo de corpo com dados fictícios
+                ```json
+                {"holderName":"Ana Demonstração","cpf":"52998224725"}
+                ```
+                """)
             .RequireAuthorization(AuthorizationPolicies.AccountWrite), StatusCodes.Status201Created);
 
     private static void MapReviseAccount(RouteGroupBuilder accounts)
         => Describe<AccountView>(accounts.MapPut("/{id:guid}", ReviseAccount)
+            .WithName(nameof(ReviseAccount))
+            .WithSummary("Editar nome e status")
+            .WithDescription("""
+                Operador edita qualquer conta e Gerente edita contas da própria carteira.
+                Envie holderName e status, com active ou inactive. O CPF é imutável.
+                Envie Idempotency-Key e Expected-Version com a versão recebida na consulta.
+                No retry, preserve chave, conteúdo e versão original. O recibo é consultado antes da versão atual.
+
+                Versão obsoleta retorna 409 com account.stale_version. Conflito durante a gravação retorna account.concurrent_change.
+                Uma alteração efetiva incrementa a versão e registra auditoria e evento. Repetir o estado atual mantém a versão.
+
+                Exemplo de corpo
+                ```json
+                {"holderName":"Ana Demonstração","status":"inactive"}
+                ```
+                """)
             .RequireAuthorization(AuthorizationPolicies.AccountWrite));
 
     private static void MapDeleteAccount(RouteGroupBuilder accounts)
         => Describe<DeletedAccount>(accounts.MapDelete("/{id:guid}", DeleteAccount)
+            .WithName(nameof(DeleteAccount))
+            .WithSummary("Excluir uma conta")
+            .WithDescription("""
+                Operador exclui qualquer conta e Gerente exclui contas da própria carteira.
+                Envie Idempotency-Key e Expected-Version. Em retry, reutilize a chave e a versão originais.
+                A exclusão é lógica e terminal para o UUID. O CPF fica disponível para uma nova abertura.
+                O sucesso retorna 200 com id e deleted=true em data. A auditoria continua consultável pelo Operador.
+                A exclusão grava um evento AccountDeleted para entrega assíncrona.
+                """)
             .RequireAuthorization(AuthorizationPolicies.AccountWrite));
 
     private static void MapTransferPortfolio(RouteGroupBuilder accounts)
         => Describe<bool>(accounts.MapPut("/{id:guid}/portfolio", TransferPortfolio)
-            .RequireAuthorization(AuthorizationPolicies.Operator)
-            .WithSummary("Atribui ou transfere a carteira"));
+            .WithName(nameof(TransferPortfolio))
+            .WithSummary("Atribuir ou transferir carteira")
+            .WithDescription("""
+                Exige contas-web com role accounts-operator.
+                Envie subject com o UUID do gerente no Keycloak. Cabe ao Operador conferir a identidade e sua role.
+                Após a transferência, consultas e reenvios do gerente anterior passam a respeitar a carteira atual.
+                Repetir o mesmo vínculo é uma operação sem efeito. Essa rota usa concorrência do EF Core e dispensa os cabeçalhos Idempotency-Key e Expected-Version.
+                O sucesso retorna true em data e a mudança efetiva gera auditoria PortfolioAssigned.
+
+                Exemplo para o Gerente A do realm local
+                ```json
+                {"subject":"74113d8a-7870-4e36-a8f8-141a69a8a601"}
+                ```
+                """)
+            .RequireAuthorization(AuthorizationPolicies.Operator));
 
     private static void MapLinkOwner(RouteGroupBuilder accounts)
         => Describe<bool>(accounts.MapPut("/{id:guid}/owner", LinkOwner)
-            .RequireAuthorization(AuthorizationPolicies.Operator)
-            .WithSummary("Vincula a identidade do titular"));
+            .WithName(nameof(LinkOwner))
+            .WithSummary("Vincular a identidade do titular")
+            .WithDescription("""
+                Exige contas-web com role accounts-operator.
+                Envie subject com o UUID do cliente no Keycloak. Cabe ao Operador conferir a identidade e sua role.
+                Uma identidade pode estar vinculada a uma conta não excluída. Conflito retorna 409 com account.owner_already_linked.
+                Repetir o mesmo vínculo é uma operação sem efeito. Essa rota usa concorrência do EF Core e dispensa os cabeçalhos Idempotency-Key e Expected-Version.
+                O sucesso retorna true em data e a mudança efetiva gera auditoria OwnerLinked.
+
+                Exemplo para o Cliente do realm local
+                ```json
+                {"subject":"74113d8a-7870-4e36-a8f8-141a69a8a603"}
+                ```
+                """)
+            .RequireAuthorization(AuthorizationPolicies.Operator));
 
     private static void MapListAccountChanges(RouteGroupBuilder accounts)
         => Describe<AccountChangePage>(accounts.MapGet("/history", ListAccountChanges)
-            .RequireAuthorization(AuthorizationPolicies.Operator)
-            .WithSummary("Consulta o histórico de alterações de contas"));
+            .WithName(nameof(ListAccountChanges))
+            .WithSummary("Consultar o histórico de alterações")
+            .WithDescription("""
+                Exige contas-web com role accounts-operator. Inclui alterações de contas excluídas.
+                Cada item contém ID do registro, ID da conta, ação, autor azp:sub e horário UTC. O seed usa system:seed.
+                As ações incluem AccountCreated, AccountUpdated, AccountDeleted, PortfolioAssigned e OwnerLinked.
+                Consultas, falhas, replays e alterações sem efeito ficam fora da trilha.
+
+                Use accountId para filtrar uma conta. limit aceita de 1 a 100, com padrão 25.
+                Os registros chegam do mais recente para o mais antigo. Envie data.nextBefore como before para avançar.
+                nextBefore=null indica o fim. A resposta usa Cache-Control: no-store.
+                """)
+            .RequireAuthorization(AuthorizationPolicies.Operator));
 
     private static void MapGetPermissions(RouteGroupBuilder accounts)
         => Describe<AccountPermissions>(accounts.MapGet("/permissions", GetPermissions)
+            .WithName(nameof(GetPermissions))
+            .WithSummary("Consultar permissões da sessão")
+            .WithDescription("""
+                Exige contas-web e um perfil de leitura de contas.
+                Retorna canWrite para Operador e Gerente e canAssign somente para Operador.
+                O cabeçalho Idempotency-Scope contém a impressão SHA-256 da identidade, usada para separar tentativas no frontend.
+                As permissões orientam a interface. A API verifica autorização e acesso à conta em cada operação.
+                """)
             .RequireAuthorization(AuthorizationPolicies.AccountRead));
 
     private static async Task<IResult> ListAccounts(int? limit, int? offset, ISender sender, HttpContext http,

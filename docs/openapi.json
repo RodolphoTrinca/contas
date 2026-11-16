@@ -1,12 +1,13 @@
 {
   "openapi": "3.1.1",
   "info": {
-    "title": "Contas.Api | v1",
+    "title": "Banco KRT · API de Contas",
+    "description": "Gestão de contas, carteiras e titulares, com auditoria e consultas para Fraude e Cartões.\nAs operações são agrupadas por contexto e usam o prefixo /api/v1.\n\n## Autenticação\n\nUse um access token do realm contas no campo Bearer de autenticação do Scalar.\nA audiência esperada é contas-api. O cliente contas-web usa login OIDC com PKCE.\nOperador administra todas as contas, Gerente administra a própria carteira e Cliente consulta sua conta vinculada.\nFraude e Cartões usam client credentials e só acessam as operações de sua integração.\n\n## Contrato e reenvio\n\nSucesso retorna data, error=null e traceId. Falha retorna data=null, error.code, error.message e traceId.\nAbertura, edição e exclusão exigem Idempotency-Key. Edição e exclusão também exigem Expected-Version.\nReutilize chave, conteúdo e versão original ao repetir uma tentativa. O recibo dura 24 horas por identidade e chave.\nChaves diferentes representam tentativas diferentes, sujeitas às regras de CPF único e concorrência.\n\n## Eventos e auditoria\n\nAbertura, edição efetiva e exclusão gravam auditoria e evento na mesma transação da conta.\nA entrega a Fraude e Cartões é assíncrona. Carteira e titular registram auditoria própria.\nO histórico de mensagens das demos está disponível no painel local da porta 5093.\n\nConsulte os usuários locais, exemplos curl e o fluxo de login no [guia de autenticação](https://github.com/RodolphoTrinca/contas/blob/main/docs/autenticacao.md).",
     "version": "1.0.0"
   },
   "servers": [
     {
-      "url": "http://localhost:18080/"
+      "url": "http://localhost:8080/"
     }
   ],
   "paths": {
@@ -15,10 +16,14 @@
         "tags": [
           "Contas"
         ],
+        "summary": "Listar contas visíveis",
+        "description": "Operador lista todas as contas, Gerente lista a própria carteira e Cliente lista a conta vinculada à sua identidade.\nA lista omite contas excluídas e mascara o CPF. A ordenação é por nome e UUID.\nUse limit entre 1 e 100 e offset a partir de zero. Os padrões são 25 e 0.\nA resposta contém um array em data. Busca e filtros da interface atuam sobre a página carregada.",
+        "operationId": "ListAccounts",
         "parameters": [
           {
             "name": "limit",
             "in": "query",
+            "description": "Quantidade máxima de itens, de 1 a 100. Padrão 25.",
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
@@ -31,6 +36,7 @@
           {
             "name": "offset",
             "in": "query",
+            "description": "Quantidade de contas a pular, a partir de zero. Padrão 0.",
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
@@ -43,7 +49,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
             "content": {
               "application/json": {
                 "schema": {
@@ -53,7 +59,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -63,7 +69,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -73,7 +79,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -83,7 +89,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -93,7 +99,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -103,7 +109,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -113,7 +119,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -128,10 +134,14 @@
         "tags": [
           "Contas"
         ],
+        "summary": "Abrir uma conta",
+        "description": "Exige o cliente contas-web com role accounts-operator ou accounts-manager.\nO nome deve ter de 2 a 120 caracteres. O CPF aceita 11 dígitos ou o formato pontuado e deve ter dígitos verificadores válidos.\nA conta começa active, com versão 1. Abertura pelo Gerente atribui automaticamente a conta à sua carteira.\n\nEnvie Idempotency-Key com um UUID novo para esta operação. Em retry, preserve chave e conteúdo.\nO recibo dura 24 horas por identidade e chave. Reuso com conteúdo diferente retorna 409 com idempotency.key_conflict.\nCPF já usado por uma conta não excluída retorna 409 com account.duplicate_cpf.\nO sucesso retorna 201, Location e a conta em data. Auditoria e evento são gravados na mesma transação.\n\nExemplo de corpo com dados fictícios\n```json\n{\"holderName\":\"Ana Demonstração\",\"cpf\":\"52998224725\"}\n```",
+        "operationId": "OpenAccount",
         "parameters": [
           {
             "name": "Idempotency-Key",
             "in": "header",
+            "description": "UUID não vazio. Reutilize a mesma chave e o mesmo conteúdo no retry, dentro de 24 horas.",
             "required": true,
             "schema": {
               "type": "string",
@@ -151,7 +161,21 @@
         },
         "responses": {
           "201": {
-            "description": "Created",
+            "description": "Conta aberta. Retorna a conta em data e sua URL no cabeçalho Location.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Presente com valor true quando a resposta vem de um recibo idempotente.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "description": "Caminho /api/v1/accounts/{id} da conta criada.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -161,7 +185,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -171,7 +195,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -181,7 +205,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -191,7 +215,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -201,7 +225,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -211,7 +235,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -221,7 +245,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -238,10 +262,14 @@
         "tags": [
           "Contas"
         ],
+        "summary": "Consultar uma conta",
+        "description": "Retorna UUID, nome, CPF mascarado, status e versão da conta.\nOperador consulta qualquer conta, Gerente consulta a própria carteira e Cliente consulta a conta vinculada.\nConta ausente, excluída ou fora do escopo retorna 404 com account.not_found.\nConsultas do Operador podem usar Redis. Consultas de Gerente e Cliente verificam os vínculos no PostgreSQL.",
+        "operationId": "GetAccount",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "UUID da conta. Conta ausente, excluída ou fora do escopo resulta em 404.",
             "required": true,
             "schema": {
               "type": "string",
@@ -251,7 +279,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
             "content": {
               "application/json": {
                 "schema": {
@@ -261,7 +289,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -271,7 +299,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -281,7 +309,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -291,7 +319,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -301,7 +329,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -311,7 +339,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -321,7 +349,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -336,10 +364,14 @@
         "tags": [
           "Contas"
         ],
+        "summary": "Editar nome e status",
+        "description": "Operador edita qualquer conta e Gerente edita contas da própria carteira.\nEnvie holderName e status, com active ou inactive. O CPF é imutável.\nEnvie Idempotency-Key e Expected-Version com a versão recebida na consulta.\nNo retry, preserve chave, conteúdo e versão original. O recibo é consultado antes da versão atual.\n\nVersão obsoleta retorna 409 com account.stale_version. Conflito durante a gravação retorna account.concurrent_change.\nUma alteração efetiva incrementa a versão e registra auditoria e evento. Repetir o estado atual mantém a versão.\n\nExemplo de corpo\n```json\n{\"holderName\":\"Ana Demonstração\",\"status\":\"inactive\"}\n```",
+        "operationId": "ReviseAccount",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "UUID da conta. Conta ausente, excluída ou fora do escopo resulta em 404.",
             "required": true,
             "schema": {
               "type": "string",
@@ -349,6 +381,7 @@
           {
             "name": "Idempotency-Key",
             "in": "header",
+            "description": "UUID não vazio. Reutilize a mesma chave e o mesmo conteúdo no retry, dentro de 24 horas.",
             "required": true,
             "schema": {
               "type": "string",
@@ -358,6 +391,7 @@
           {
             "name": "Expected-Version",
             "in": "header",
+            "description": "Versão positiva recebida na consulta da conta. No retry, preserve a versão da tentativa original.",
             "required": true,
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -381,7 +415,15 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Presente com valor true quando a resposta vem de um recibo idempotente.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -391,7 +433,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -401,7 +443,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -411,7 +453,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -421,7 +463,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -431,7 +473,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -441,7 +483,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -451,7 +493,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -466,10 +508,14 @@
         "tags": [
           "Contas"
         ],
+        "summary": "Excluir uma conta",
+        "description": "Operador exclui qualquer conta e Gerente exclui contas da própria carteira.\nEnvie Idempotency-Key e Expected-Version. Em retry, reutilize a chave e a versão originais.\nA exclusão é lógica e terminal para o UUID. O CPF fica disponível para uma nova abertura.\nO sucesso retorna 200 com id e deleted=true em data. A auditoria continua consultável pelo Operador.\nA exclusão grava um evento AccountDeleted para entrega assíncrona.",
+        "operationId": "DeleteAccount",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "UUID da conta. Conta ausente, excluída ou fora do escopo resulta em 404.",
             "required": true,
             "schema": {
               "type": "string",
@@ -479,6 +525,7 @@
           {
             "name": "Idempotency-Key",
             "in": "header",
+            "description": "UUID não vazio. Reutilize a mesma chave e o mesmo conteúdo no retry, dentro de 24 horas.",
             "required": true,
             "schema": {
               "type": "string",
@@ -488,6 +535,7 @@
           {
             "name": "Expected-Version",
             "in": "header",
+            "description": "Versão positiva recebida na consulta da conta. No retry, preserve a versão da tentativa original.",
             "required": true,
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -501,7 +549,15 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Presente com valor true quando a resposta vem de um recibo idempotente.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -511,7 +567,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -521,7 +577,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -531,7 +587,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -541,7 +597,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -551,7 +607,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -561,7 +617,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -571,7 +627,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -588,11 +644,14 @@
         "tags": [
           "Contas"
         ],
-        "summary": "Atribui ou transfere a carteira",
+        "summary": "Atribuir ou transferir carteira",
+        "description": "Exige contas-web com role accounts-operator.\nEnvie subject com o UUID do gerente no Keycloak. Cabe ao Operador conferir a identidade e sua role.\nApós a transferência, consultas e reenvios do gerente anterior passam a respeitar a carteira atual.\nRepetir o mesmo vínculo é uma operação sem efeito. Essa rota usa concorrência do EF Core e dispensa os cabeçalhos Idempotency-Key e Expected-Version.\nO sucesso retorna true em data e a mudança efetiva gera auditoria PortfolioAssigned.\n\nExemplo para o Gerente A do realm local\n```json\n{\"subject\":\"74113d8a-7870-4e36-a8f8-141a69a8a601\"}\n```",
+        "operationId": "TransferPortfolio",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "UUID da conta. Conta ausente, excluída ou fora do escopo resulta em 404.",
             "required": true,
             "schema": {
               "type": "string",
@@ -612,7 +671,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
             "content": {
               "application/json": {
                 "schema": {
@@ -622,7 +681,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -632,7 +691,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -642,7 +701,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -652,7 +711,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -662,7 +721,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -672,7 +731,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -682,7 +741,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -699,11 +758,14 @@
         "tags": [
           "Contas"
         ],
-        "summary": "Vincula a identidade do titular",
+        "summary": "Vincular a identidade do titular",
+        "description": "Exige contas-web com role accounts-operator.\nEnvie subject com o UUID do cliente no Keycloak. Cabe ao Operador conferir a identidade e sua role.\nUma identidade pode estar vinculada a uma conta não excluída. Conflito retorna 409 com account.owner_already_linked.\nRepetir o mesmo vínculo é uma operação sem efeito. Essa rota usa concorrência do EF Core e dispensa os cabeçalhos Idempotency-Key e Expected-Version.\nO sucesso retorna true em data e a mudança efetiva gera auditoria OwnerLinked.\n\nExemplo para o Cliente do realm local\n```json\n{\"subject\":\"74113d8a-7870-4e36-a8f8-141a69a8a603\"}\n```",
+        "operationId": "LinkOwner",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "UUID da conta. Conta ausente, excluída ou fora do escopo resulta em 404.",
             "required": true,
             "schema": {
               "type": "string",
@@ -723,7 +785,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
             "content": {
               "application/json": {
                 "schema": {
@@ -733,7 +795,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -743,7 +805,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -753,7 +815,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -763,7 +825,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -773,7 +835,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -783,7 +845,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -793,7 +855,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -810,11 +872,14 @@
         "tags": [
           "Contas"
         ],
-        "summary": "Consulta o histórico de alterações de contas",
+        "summary": "Consultar o histórico de alterações",
+        "description": "Exige contas-web com role accounts-operator. Inclui alterações de contas excluídas.\nCada item contém ID do registro, ID da conta, ação, autor azp:sub e horário UTC. O seed usa system:seed.\nAs ações incluem AccountCreated, AccountUpdated, AccountDeleted, PortfolioAssigned e OwnerLinked.\nConsultas, falhas, replays e alterações sem efeito ficam fora da trilha.\n\nUse accountId para filtrar uma conta. limit aceita de 1 a 100, com padrão 25.\nOs registros chegam do mais recente para o mais antigo. Envie data.nextBefore como before para avançar.\nnextBefore=null indica o fim. A resposta usa Cache-Control: no-store.",
+        "operationId": "ListAccountChanges",
         "parameters": [
           {
             "name": "accountId",
             "in": "query",
+            "description": "UUID opcional para filtrar o histórico de uma conta, inclusive excluída.",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -823,6 +888,7 @@
           {
             "name": "before",
             "in": "query",
+            "description": "Cursor positivo recebido em data.nextBefore para buscar registros mais antigos.",
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
@@ -835,6 +901,7 @@
           {
             "name": "limit",
             "in": "query",
+            "description": "Quantidade máxima de itens, de 1 a 100. Padrão 25.",
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
@@ -847,7 +914,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
             "content": {
               "application/json": {
                 "schema": {
@@ -857,7 +924,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -867,7 +934,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -877,7 +944,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -887,7 +954,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -897,7 +964,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -907,7 +974,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -917,7 +984,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -934,9 +1001,20 @@
         "tags": [
           "Contas"
         ],
+        "summary": "Consultar permissões da sessão",
+        "description": "Exige contas-web e um perfil de leitura de contas.\nRetorna canWrite para Operador e Gerente e canAssign somente para Operador.\nO cabeçalho Idempotency-Scope contém a impressão SHA-256 da identidade, usada para separar tentativas no frontend.\nAs permissões orientam a interface. A API verifica autorização e acesso à conta em cada operação.",
+        "operationId": "GetPermissions",
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
+            "headers": {
+              "Idempotency-Scope": {
+                "description": "SHA-256 da identidade autenticada para separar tentativas no frontend.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -946,7 +1024,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -956,7 +1034,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -966,7 +1044,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -976,7 +1054,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -986,7 +1064,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -996,7 +1074,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1006,7 +1084,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1023,10 +1101,14 @@
         "tags": [
           "Fraude"
         ],
+        "summary": "Consultar status para Fraude",
+        "description": "Exige cliente fraud-api e role fraud-reader, com token client credentials. Retorna id e status active ou inactive. Conta ausente ou excluída retorna 404. Consultas podem usar Redis. Tokens de Cartões ou do cliente web recebem 403 nesta rota.",
+        "operationId": "GetAccountStatus",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "UUID da conta. Conta ausente, excluída ou fora do escopo resulta em 404.",
             "required": true,
             "schema": {
               "type": "string",
@@ -1036,7 +1118,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1046,7 +1128,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1056,7 +1138,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1066,7 +1148,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1076,7 +1158,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1086,7 +1168,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1096,7 +1178,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1106,7 +1188,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1123,10 +1205,14 @@
         "tags": [
           "Cartões"
         ],
+        "summary": "Consultar elegibilidade para Cartões",
+        "description": "Exige cliente cards-api e role cards-reader, com token client credentials. Retorna id e eligible=true quando a conta está ativa. A regra é demonstrativa. Conta ausente ou excluída retorna 404. Consultas podem usar Redis. Tokens de Fraude ou do cliente web recebem 403 nesta rota.",
+        "operationId": "GetCardEligibility",
         "parameters": [
           {
             "name": "id",
             "in": "path",
+            "description": "UUID da conta. Conta ausente, excluída ou fora do escopo resulta em 404.",
             "required": true,
             "schema": {
               "type": "string",
@@ -1136,7 +1222,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Operação concluída. Resultado em data, error=null e traceId da requisição.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1146,7 +1232,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Entrada inválida. Consulte error.code, como request.invalid, account.invalid_cpf ou account.invalid_name.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1156,7 +1242,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Autenticação ausente ou inválida. Código auth.required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1166,7 +1252,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Cliente ou role sem permissão. Código auth.forbidden.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1176,7 +1262,7 @@
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Conta ausente, excluída ou fora do escopo. Código account.not_found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1186,7 +1272,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflito de CPF, versão, vínculo ou chave idempotente. O código específico é descrito na operação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1196,7 +1282,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Error",
+            "description": "Falha inesperada. Código service.internal_error. Use traceId para correlação.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1206,7 +1292,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable",
+            "description": "Dependência temporariamente indisponível. Código service.unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1348,6 +1434,7 @@
         "properties": {
           "subject": {
             "type": "string",
+            "description": "UUID da identidade Keycloak do gerente ou titular, conforme a operação.",
             "format": "uuid"
           }
         }
@@ -1691,13 +1778,15 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Nome do titular, com 2 a 120 caracteres após trim."
           },
           "cpf": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "CPF válido de 11 dígitos ou pontuado. Deve ser único entre contas não excluídas."
           }
         }
       },
@@ -1712,7 +1801,8 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Novo nome, com 2 a 120 caracteres após trim."
           },
           "status": {
             "oneOf": [
@@ -1720,6 +1810,7 @@
                 "type": "null"
               },
               {
+                "description": "Status desejado, active ou inactive.",
                 "$ref": "#/components/schemas/AccountStatus"
               }
             ]
@@ -1730,6 +1821,7 @@
     "securitySchemes": {
       "Bearer": {
         "type": "http",
+        "description": "Access token Keycloak com audiência contas-api e cliente/role compatíveis com a operação.",
         "scheme": "bearer",
         "bearerFormat": "JWT"
       }
