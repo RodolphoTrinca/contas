@@ -14,8 +14,11 @@ builder.Services.AddOptions<PartnerOptions>()
 builder.Services.AddHttpClient<PartnerClient>(client => client.Timeout = TimeSpan.FromSeconds(10))
     .RemoveAllLoggers();
 
+builder.Services.AddMessageConsumer();
+
 var app = builder.Build();
 app.UseSerilogRequestLogging();
 app.MapGet("/api/v1/accounts/{id:guid}", (Guid id, PartnerClient client, CancellationToken ct) => client.Query(id, ct));
+await app.MapMessageHistory();
 await app.RunAsync();
 return 0;

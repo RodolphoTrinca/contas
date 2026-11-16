@@ -8,5 +8,6 @@ RUN dotnet publish samples/Contas.PartnerDemo --no-restore -c Release -o /publis
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /publish .
+RUN mkdir /data && chown app:app /data
 USER app
 ENTRYPOINT ["dotnet", "Contas.PartnerDemo.dll"]

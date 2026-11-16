@@ -1,3 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-  <ItemGroup><PackageReference Include="Serilog.AspNetCore" /></ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="AWSSDK.SQS" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
 </Project>
